@@ -13,7 +13,11 @@ import {
   Warning,
   Users,
   ArrowRight,
-  Plus
+  Plus,
+  Bell,
+  CheckCircle,
+  Clock,
+  CalendarCheck
 } from "@phosphor-icons/react";
 import { Button } from "../components/ui/button";
 import {
@@ -28,11 +32,13 @@ import {
   Pie,
   Cell
 } from "recharts";
+import { formatDate } from "../utils/dateFormat";
 
 const Dashboard = () => {
   const { token } = useAuth();
   const [metrics, setMetrics] = useState(null);
   const [charts, setCharts] = useState(null);
+  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,20 +47,36 @@ const Dashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [metricsRes, chartsRes] = await Promise.all([
+      const [metricsRes, chartsRes, notifRes] = await Promise.all([
         axios.get(`${API}/dashboard/metrics`, {
           headers: { Authorization: `Bearer ${token}` }
         }),
         axios.get(`${API}/dashboard/charts`, {
           headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API}/notifications/followups`, {
+          headers: { Authorization: `Bearer ${token}` }
         })
       ]);
       setMetrics(metricsRes.data);
       setCharts(chartsRes.data);
+      setNotifications(notifRes.data);
     } catch (error) {
       toast.error("Failed to load dashboard data");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const markFollowupComplete = async (checkupId) => {
+    try {
+      await axios.put(`${API}/notifications/followups/${checkupId}/complete`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Followup marked as complete");
+      fetchData();
+    } catch (error) {
+      toast.error("Failed to update followup");
     }
   };
 
@@ -89,14 +111,83 @@ const Dashboard = () => {
         </Link>
       </div>
 
+      {/* Notifications Section */}
+      {notifications.length > 0 && (
+        <div className="bg-white border border-[#E7E5E4] rounded-lg p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Bell size={22} className="text-[#F59E0B]" />
+            <h3 className="text-lg font-semibold text-[#1C1917]" style={{ fontFamily: 'Manrope' }}>
+              Follow-up Reminders ({notifications.length})
+            </h3>
+          </div>
+          <div className="space-y-3 max-h-64 overflow-y-auto">
+            {notifications.map((notif) => (
+              <div 
+                key={notif.checkup_id}
+                className={`p-3 rounded-lg border flex items-center justify-between gap-3 ${
+                  notif.urgency === 'overdue' ? 'bg-red-50 border-red-200' :
+                  notif.urgency === 'today' ? 'bg-orange-50 border-orange-200' :
+                  notif.urgency === 'tomorrow' ? 'bg-yellow-50 border-yellow-200' :
+                  'bg-[#F5F5F4] border-[#E7E5E4]'
+                }`}
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    {notif.urgency === 'overdue' && <Warning size={18} className="text-red-600" />}
+                    {notif.urgency === 'today' && <Clock size={18} className="text-orange-600" />}
+                    {notif.urgency === 'tomorrow' && <CalendarCheck size={18} className="text-yellow-600" />}
+                    <span className={`text-xs font-semibold uppercase ${
+                      notif.urgency === 'overdue' ? 'text-red-600' :
+                      notif.urgency === 'today' ? 'text-orange-600' :
+                      notif.urgency === 'tomorrow' ? 'text-yellow-600' :
+                      'text-[#57534E]'
+                    }`}>
+                      {notif.urgency}
+                    </span>
+                  </div>
+                  <p className="text-sm font-medium text-[#1C1917] mt-1">
+                    {notif.animal_name} <span className="text-[#4CAF50]">({notif.case_number})</span>
+                  </p>
+                  <p className="text-xs text-[#57534E]">
+                    Follow-up: {formatDate(notif.followup_date)}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link to={`/cases/${notif.case_id}`}>
+                    <Button variant="outline" size="sm" className="h-9">
+                      View
+                    </Button>
+                  </Link>
+                  <Button 
+                    size="sm" 
+                    className="h-9 bg-[#4CAF50] hover:bg-[#43A047] text-white"
+                    onClick={() => markFollowupComplete(notif.checkup_id)}
+                    data-testid={`complete-followup-${notif.checkup_id}`}
+                  >
+                    <CheckCircle size={16} className="mr-1" />
+                    Done
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Quick Stats Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           icon={PawPrint}
+          label="Total Cases"
+          value={metrics?.cases?.total || 0}
+          color="green"
+        />
+        <StatCard
+          icon={Heartbeat}
           label="Active Cases"
           value={metrics?.cases?.total_active || 0}
           trend={`+${metrics?.cases?.new_today || 0} today`}
-          color="green"
+          color="blue"
         />
         <StatCard
           icon={Warning}
@@ -110,7 +201,7 @@ const Dashboard = () => {
           label="Sterilised"
           value={metrics?.sterilisation?.total || 0}
           trend={`+${metrics?.sterilisation?.this_month || 0} this month`}
-          color="blue"
+          color="purple"
         />
         <StatCard
           icon={FirstAid}
@@ -293,7 +384,8 @@ const StatCard = ({ icon: Icon, label, value, trend, subValue, color }) => {
     green: "bg-[#E8F5E9] text-[#1B5E20]",
     red: "bg-red-50 text-red-700",
     blue: "bg-blue-50 text-blue-700",
-    orange: "bg-orange-50 text-orange-700"
+    orange: "bg-orange-50 text-orange-700",
+    purple: "bg-purple-50 text-purple-700"
   };
 
   return (

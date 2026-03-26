@@ -10,7 +10,7 @@ Build a full-stack, production-ready web application for managing animal rescue,
 - **Auth**: JWT with device control
 
 ## User Personas
-1. **Admin**: Full access - manage users, cases, soft-delete functionality
+1. **Admin**: Full access - manage users, vets, locations, soft-delete cases
 2. **User (Staff/Volunteer)**: Add/edit cases, checkups, media upload
 
 ## Core Requirements (Static)
@@ -22,6 +22,8 @@ Build a full-stack, production-ready web application for managing animal rescue,
 - Device-based login control (one device per user, admins exempt)
 
 ## What's Been Implemented (March 2026)
+
+### Phase 1 - MVP
 - [x] JWT Authentication with device control
 - [x] Case CRUD with all status options
 - [x] Vet Checkup management
@@ -33,25 +35,33 @@ Build a full-stack, production-ready web application for managing animal rescue,
 - [x] Green theme from SEVA logo
 - [x] Mobile-first responsive design
 
-## P0 - Completed
-- Case management with full lifecycle
-- Dashboard metrics
-- Authentication & authorization
-- File storage integration
+### Phase 2 - Feature Enhancements
+- [x] Date filters (Today, Yesterday, Last 7 Days, Last 30 Days, Custom)
+- [x] Movement reason "Others" with custom text input
+- [x] Media upload during case creation (optional)
+- [x] Special Notes section per case
+- [x] Follow-up notifications with reminders (Overdue, Today, Tomorrow)
+- [x] Date format: "26th March, 2026" and time "4:23pm"
+- [x] Admin: Vet Names management for dropdown
+- [x] Admin: Sterilisation Locations management
+- [x] Editable vet checkups
+- [x] Updated conditions: Accident, Cancer, Injury, Sick, Critical, Canine Distemper, Parvo Virus, Not Sure
+- [x] Case Type before Condition (disabled for Sterilisation Only)
+- [x] Status: Removed "Under Recovery", renamed "Rescue Created" to "Rescued (Status Pending)"
+- [x] Filter count display
+- [x] Dashboard: Total Cases block
 
 ## P1 - Backlog
-- Inventory/Medicine stock module
-- Audit log viewer
-- Advanced case search
-- Push notifications for follow-ups
+- [ ] Inventory/Medicine stock module
+- [ ] Audit log viewer UI
+- [ ] Advanced case search with GPS
+- [ ] Push notifications for follow-ups
 
 ## P2 - Future
-- Offline support/PWA
-- GPS location capture
-- Reports export (PDF)
-- Mobile app
+- [ ] Offline support/PWA
+- [ ] GPS location capture
+- [ ] Reports export (PDF)
+- [ ] Mobile app
 
-## Next Tasks
-1. Add inventory management module
-2. Create audit log viewing UI
-3. Add case export functionality
+## Credentials
+- **Admin**: admin@seva.org / Admin@123

@@ -19,8 +19,7 @@ import {
   Dialog,
   DialogContent,
   DialogHeader,
-  DialogTitle,
-  DialogTrigger
+  DialogTitle
 } from "../components/ui/dialog";
 import {
   ArrowLeft,
@@ -33,15 +32,14 @@ import {
   Syringe,
   MapPin,
   Calendar,
-  Phone,
-  User,
   House,
   ClockCounterClockwise,
   Upload,
   X,
-  FileText,
-  PawPrint
+  PawPrint,
+  Note
 } from "@phosphor-icons/react";
+import { formatDate, formatTime, formatTimestamp } from "../utils/dateFormat";
 
 const CaseDetail = () => {
   const { id } = useParams();
@@ -51,14 +49,20 @@ const CaseDetail = () => {
   const [vetCheckups, setVetCheckups] = useState([]);
   const [sterilisations, setSterilisations] = useState([]);
   const [movements, setMovements] = useState([]);
+  const [specialNotes, setSpecialNotes] = useState([]);
+  const [vetNames, setVetNames] = useState([]);
+  const [sterilLocations, setSterilLocations] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
 
   // Dialogs
   const [showVetDialog, setShowVetDialog] = useState(false);
+  const [showEditVetDialog, setShowEditVetDialog] = useState(false);
+  const [editingCheckup, setEditingCheckup] = useState(null);
   const [showSterilDialog, setShowSterilDialog] = useState(false);
   const [showMovementDialog, setShowMovementDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
+  const [showNoteDialog, setShowNoteDialog] = useState(false);
   const [uploadType, setUploadType] = useState("image");
 
   useEffect(() => {
@@ -67,16 +71,22 @@ const CaseDetail = () => {
 
   const fetchAllData = async () => {
     try {
-      const [caseRes, vetRes, sterilRes, movementRes] = await Promise.all([
+      const [caseRes, vetRes, sterilRes, movementRes, notesRes, vetNamesRes, locationsRes] = await Promise.all([
         axios.get(`${API}/cases/${id}`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API}/vet-checkups?case_id=${id}`, { headers: { Authorization: `Bearer ${token}` } }),
         axios.get(`${API}/sterilisations?case_id=${id}`, { headers: { Authorization: `Bearer ${token}` } }),
-        axios.get(`${API}/movements?case_id=${id}`, { headers: { Authorization: `Bearer ${token}` } })
+        axios.get(`${API}/movements?case_id=${id}`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API}/special-notes?case_id=${id}`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API}/vet-names`, { headers: { Authorization: `Bearer ${token}` } }),
+        axios.get(`${API}/sterilisation-locations`, { headers: { Authorization: `Bearer ${token}` } })
       ]);
       setCaseData(caseRes.data);
       setVetCheckups(vetRes.data);
       setSterilisations(sterilRes.data);
       setMovements(movementRes.data);
+      setSpecialNotes(notesRes.data);
+      setVetNames(vetNamesRes.data);
+      setSterilLocations(locationsRes.data);
     } catch (error) {
       toast.error("Failed to load case details");
       navigate("/cases");
@@ -118,12 +128,21 @@ const CaseDetail = () => {
     }
   };
 
+  const openEditCheckup = (checkup) => {
+    setEditingCheckup(checkup);
+    setShowEditVetDialog(true);
+  };
+
   const getConditionClass = (condition) => {
     const classes = {
       Critical: "condition-critical",
-      Injured: "condition-injured",
+      Injury: "condition-injured",
       Sick: "condition-sick",
-      Healthy: "condition-healthy"
+      Accident: "bg-red-600 text-white",
+      Cancer: "bg-purple-600 text-white",
+      "Canine Distemper": "bg-orange-600 text-white",
+      "Parvo Virus": "bg-red-700 text-white",
+      "Not Sure": "bg-gray-500 text-white"
     };
     return classes[condition] || "bg-gray-500 text-white";
   };
@@ -162,9 +181,11 @@ const CaseDetail = () => {
               <h1 className="text-xl sm:text-2xl font-bold text-[#1C1917]" style={{ fontFamily: 'Manrope' }}>
                 {caseData.case_id}
               </h1>
-              <span className={`px-2 py-0.5 text-xs font-semibold rounded ${getConditionClass(caseData.condition)}`}>
-                {caseData.condition}
-              </span>
+              {caseData.condition && (
+                <span className={`px-2 py-0.5 text-xs font-semibold rounded ${getConditionClass(caseData.condition)}`}>
+                  {caseData.condition}
+                </span>
+              )}
             </div>
             <p className="text-[#57534E] mt-0.5">
               {caseData.animal_name || caseData.animal_type} • {caseData.case_type}
@@ -211,12 +232,12 @@ const CaseDetail = () => {
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-        <TabsList className="w-full flex bg-white border border-[#E7E5E4] rounded-lg p-1 h-auto">
-          {["overview", "medical", "sterilisation", "media", "activity"].map((tab) => (
+        <TabsList className="w-full flex bg-white border border-[#E7E5E4] rounded-lg p-1 h-auto flex-wrap">
+          {["overview", "medical", "sterilisation", "media", "notes", "activity"].map((tab) => (
             <TabsTrigger
               key={tab}
               value={tab}
-              className="flex-1 h-12 data-[state=active]:bg-[#E8F5E9] data-[state=active]:text-[#1B5E20] capitalize font-medium"
+              className="flex-1 min-w-[80px] h-12 data-[state=active]:bg-[#E8F5E9] data-[state=active]:text-[#1B5E20] capitalize font-medium"
               data-testid={`tab-${tab}`}
             >
               {tab}
@@ -238,7 +259,7 @@ const CaseDetail = () => {
                 <InfoRow label="Type" value={caseData.animal_type} />
                 <InfoRow label="Gender" value={caseData.gender || "Unknown"} />
                 <InfoRow label="Age" value={caseData.age || "Unknown"} />
-                <InfoRow label="Condition" value={caseData.condition} />
+                <InfoRow label="Condition" value={caseData.condition || "N/A"} />
                 {caseData.condition_notes && (
                   <InfoRow label="Notes" value={caseData.condition_notes} />
                 )}
@@ -253,8 +274,8 @@ const CaseDetail = () => {
               </h3>
               <div className="space-y-3">
                 <InfoRow 
-                  label="Date" 
-                  value={`${new Date(caseData.rescue_date).toLocaleDateString()} ${caseData.rescue_time || ""}`} 
+                  label="Date & Time" 
+                  value={`${formatDate(caseData.rescue_date)}${caseData.rescue_time ? ` at ${formatTime(caseData.rescue_time)}` : ""}`} 
                 />
                 <InfoRow label="Location" value={caseData.rescue_location} />
                 <InfoRow label="Area" value={caseData.area || "Not specified"} />
@@ -293,15 +314,31 @@ const CaseDetail = () => {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-semibold text-[#1C1917]">
-                        {new Date(checkup.checkup_date).toLocaleDateString()}
+                        {formatDate(checkup.checkup_date)}
                       </p>
                       <p className="text-sm text-[#57534E]">By {checkup.vet_name}</p>
                     </div>
-                    {checkup.next_followup_date && (
-                      <span className="text-xs px-2 py-1 bg-[#FEF3C7] text-[#92400E] rounded">
-                        Follow-up: {new Date(checkup.next_followup_date).toLocaleDateString()}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {checkup.next_followup_date && !checkup.followup_completed && (
+                        <span className="text-xs px-2 py-1 bg-[#FEF3C7] text-[#92400E] rounded">
+                          Follow-up: {formatDate(checkup.next_followup_date)}
+                        </span>
+                      )}
+                      {checkup.followup_completed && (
+                        <span className="text-xs px-2 py-1 bg-[#E8F5E9] text-[#1B5E20] rounded">
+                          Completed
+                        </span>
+                      )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditCheckup(checkup)}
+                        className="h-8"
+                        data-testid={`edit-checkup-${checkup.id}`}
+                      >
+                        <PencilSimple size={16} />
+                      </Button>
+                    </div>
                   </div>
                   {checkup.notes && (
                     <p className="mt-3 text-sm text-[#57534E] bg-[#F5F5F4] rounded p-3">
@@ -342,7 +379,7 @@ const CaseDetail = () => {
                   <div className="flex justify-between items-start">
                     <div>
                       <p className="font-semibold text-[#1C1917]">
-                        {new Date(steril.sterilisation_date).toLocaleDateString()}
+                        {formatDate(steril.sterilisation_date)}
                       </p>
                       <p className="text-sm text-[#57534E]">
                         {steril.gender} • {steril.location} • By {steril.vet_name}
@@ -417,6 +454,39 @@ const CaseDetail = () => {
           )}
         </TabsContent>
 
+        {/* Notes Tab */}
+        <TabsContent value="notes" className="mt-4 space-y-4">
+          <div className="flex justify-between items-center">
+            <h3 className="text-lg font-semibold text-[#1C1917]" style={{ fontFamily: 'Manrope' }}>
+              Special Notes
+            </h3>
+            <Button
+              onClick={() => setShowNoteDialog(true)}
+              className="h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white"
+              data-testid="add-note-button"
+            >
+              <Plus size={20} />
+              <span className="ml-2">Add Note</span>
+            </Button>
+          </div>
+
+          {specialNotes.length === 0 ? (
+            <div className="bg-white border border-[#E7E5E4] rounded-lg p-8 text-center">
+              <Note size={48} className="mx-auto text-[#D6D3D1]" />
+              <p className="text-[#57534E] mt-4">No special notes yet</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {specialNotes.map((note) => (
+                <div key={note.id} className="bg-white border border-[#E7E5E4] rounded-lg p-4">
+                  <p className="text-sm text-[#57534E]">{formatTimestamp(note.created_at)}</p>
+                  <p className="mt-2 text-[#1C1917]">{note.note}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </TabsContent>
+
         {/* Activity Tab */}
         <TabsContent value="activity" className="mt-4 space-y-4">
           <div className="flex justify-between items-center">
@@ -451,7 +521,7 @@ const CaseDetail = () => {
                         {movement.from_location} → {movement.to_location}
                       </p>
                       <p className="text-sm text-[#57534E]">
-                        {new Date(movement.date).toLocaleDateString()} • {movement.reason}
+                        {formatDate(movement.date)} • {movement.reason === "Others" ? movement.custom_reason : movement.reason}
                       </p>
                     </div>
                   </div>
@@ -504,6 +574,17 @@ const CaseDetail = () => {
         onClose={() => setShowVetDialog(false)}
         caseId={id}
         token={token}
+        vetNames={vetNames}
+        onSuccess={fetchAllData}
+      />
+
+      {/* Edit Vet Checkup Dialog */}
+      <EditVetCheckupDialog
+        open={showEditVetDialog}
+        onClose={() => { setShowEditVetDialog(false); setEditingCheckup(null); }}
+        checkup={editingCheckup}
+        token={token}
+        vetNames={vetNames}
         onSuccess={fetchAllData}
       />
 
@@ -513,6 +594,8 @@ const CaseDetail = () => {
         onClose={() => setShowSterilDialog(false)}
         caseId={id}
         token={token}
+        vetNames={vetNames}
+        locations={sterilLocations}
         onSuccess={fetchAllData}
       />
 
@@ -532,6 +615,15 @@ const CaseDetail = () => {
         type={uploadType}
         onUpload={handleUpload}
       />
+
+      {/* Special Note Dialog */}
+      <SpecialNoteDialog
+        open={showNoteDialog}
+        onClose={() => setShowNoteDialog(false)}
+        caseId={id}
+        token={token}
+        onSuccess={fetchAllData}
+      />
     </div>
   );
 };
@@ -550,7 +642,7 @@ const TimelineItem = ({ date, title, description }) => (
       <div className="w-0.5 flex-1 bg-[#E7E5E4]"></div>
     </div>
     <div className="pb-4">
-      <p className="text-xs text-[#78716C]">{new Date(date).toLocaleString()}</p>
+      <p className="text-xs text-[#78716C]">{formatTimestamp(date)}</p>
       <p className="font-medium text-[#1C1917]">{title}</p>
       <p className="text-sm text-[#57534E]">{description}</p>
     </div>
@@ -558,7 +650,7 @@ const TimelineItem = ({ date, title, description }) => (
 );
 
 // Dialogs
-const VetCheckupDialog = ({ open, onClose, caseId, token, onSuccess }) => {
+const VetCheckupDialog = ({ open, onClose, caseId, token, vetNames, onSuccess }) => {
   const [form, setForm] = useState({
     checkup_date: new Date().toISOString().split("T")[0],
     vet_name: "",
@@ -611,13 +703,26 @@ const VetCheckupDialog = ({ open, onClose, caseId, token, onSuccess }) => {
           </div>
           <div>
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Vet Name *</Label>
-            <Input
-              value={form.vet_name}
-              onChange={(e) => setForm({ ...form, vet_name: e.target.value })}
-              placeholder="Enter vet name"
-              className="h-12 mt-1"
-              data-testid="vet-checkup-vet-name"
-            />
+            {vetNames.length > 0 ? (
+              <Select value={form.vet_name} onValueChange={(v) => setForm({ ...form, vet_name: v })}>
+                <SelectTrigger className="h-12 mt-1" data-testid="vet-checkup-vet-name">
+                  <SelectValue placeholder="Select vet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vetNames.map((vet) => (
+                    <SelectItem key={vet.id} value={vet.name}>{vet.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={form.vet_name}
+                onChange={(e) => setForm({ ...form, vet_name: e.target.value })}
+                placeholder="Enter vet name"
+                className="h-12 mt-1"
+                data-testid="vet-checkup-vet-name"
+              />
+            )}
           </div>
           <div>
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Notes</Label>
@@ -654,7 +759,127 @@ const VetCheckupDialog = ({ open, onClose, caseId, token, onSuccess }) => {
   );
 };
 
-const SterilisationDialog = ({ open, onClose, caseId, token, onSuccess }) => {
+const EditVetCheckupDialog = ({ open, onClose, checkup, token, vetNames, onSuccess }) => {
+  const [form, setForm] = useState({
+    checkup_date: "",
+    vet_name: "",
+    notes: "",
+    next_followup_date: "",
+    followup_completed: false
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (checkup) {
+      setForm({
+        checkup_date: checkup.checkup_date || "",
+        vet_name: checkup.vet_name || "",
+        notes: checkup.notes || "",
+        next_followup_date: checkup.next_followup_date || "",
+        followup_completed: checkup.followup_completed || false
+      });
+    }
+  }, [checkup]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!checkup) return;
+    
+    setLoading(true);
+    try {
+      await axios.put(`${API}/vet-checkups/${checkup.id}`, form, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Checkup updated successfully");
+      onSuccess();
+      onClose();
+    } catch (error) {
+      toast.error("Failed to update checkup");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle style={{ fontFamily: 'Manrope' }}>Edit Vet Checkup</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Checkup Date</Label>
+            <Input
+              type="date"
+              value={form.checkup_date}
+              onChange={(e) => setForm({ ...form, checkup_date: e.target.value })}
+              className="h-12 mt-1"
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Vet Name</Label>
+            {vetNames.length > 0 ? (
+              <Select value={form.vet_name} onValueChange={(v) => setForm({ ...form, vet_name: v })}>
+                <SelectTrigger className="h-12 mt-1">
+                  <SelectValue placeholder="Select vet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vetNames.map((vet) => (
+                    <SelectItem key={vet.id} value={vet.name}>{vet.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={form.vet_name}
+                onChange={(e) => setForm({ ...form, vet_name: e.target.value })}
+                className="h-12 mt-1"
+              />
+            )}
+          </div>
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Notes</Label>
+            <Textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              className="mt-1"
+              rows={3}
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Next Follow-up Date</Label>
+            <Input
+              type="date"
+              value={form.next_followup_date}
+              onChange={(e) => setForm({ ...form, next_followup_date: e.target.value })}
+              className="h-12 mt-1"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              id="followup_completed"
+              checked={form.followup_completed}
+              onChange={(e) => setForm({ ...form, followup_completed: e.target.checked })}
+              className="w-5 h-5"
+            />
+            <Label htmlFor="followup_completed" className="text-sm">Follow-up completed</Label>
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-12">
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading} className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white">
+              {loading ? "Saving..." : "Update"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const SterilisationDialog = ({ open, onClose, caseId, token, vetNames, locations, onSuccess }) => {
   const [form, setForm] = useState({
     sterilisation_date: new Date().toISOString().split("T")[0],
     gender: "",
@@ -720,26 +945,52 @@ const SterilisationDialog = ({ open, onClose, caseId, token, onSuccess }) => {
           </div>
           <div>
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Location *</Label>
-            <Select value={form.location} onValueChange={(v) => setForm({ ...form, location: v })}>
-              <SelectTrigger className="h-12 mt-1" data-testid="sterilisation-location">
-                <SelectValue placeholder="Select location" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="SEVA Shelter">SEVA Shelter</SelectItem>
-                <SelectItem value="Government Clinic">Government Clinic</SelectItem>
-                <SelectItem value="Private Clinic">Private Clinic</SelectItem>
-              </SelectContent>
-            </Select>
+            {locations.length > 0 ? (
+              <Select value={form.location} onValueChange={(v) => setForm({ ...form, location: v })}>
+                <SelectTrigger className="h-12 mt-1" data-testid="sterilisation-location">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.name}>{loc.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Select value={form.location} onValueChange={(v) => setForm({ ...form, location: v })}>
+                <SelectTrigger className="h-12 mt-1" data-testid="sterilisation-location">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SEVA Shelter">SEVA Shelter</SelectItem>
+                  <SelectItem value="Government Clinic">Government Clinic</SelectItem>
+                  <SelectItem value="Private Clinic">Private Clinic</SelectItem>
+                </SelectContent>
+              </Select>
+            )}
           </div>
           <div>
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Vet Name *</Label>
-            <Input
-              value={form.vet_name}
-              onChange={(e) => setForm({ ...form, vet_name: e.target.value })}
-              placeholder="Enter vet name"
-              className="h-12 mt-1"
-              data-testid="sterilisation-vet-name"
-            />
+            {vetNames.length > 0 ? (
+              <Select value={form.vet_name} onValueChange={(v) => setForm({ ...form, vet_name: v })}>
+                <SelectTrigger className="h-12 mt-1" data-testid="sterilisation-vet-name">
+                  <SelectValue placeholder="Select vet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vetNames.map((vet) => (
+                    <SelectItem key={vet.id} value={vet.name}>{vet.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={form.vet_name}
+                onChange={(e) => setForm({ ...form, vet_name: e.target.value })}
+                placeholder="Enter vet name"
+                className="h-12 mt-1"
+                data-testid="sterilisation-vet-name"
+              />
+            )}
           </div>
           <div>
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Notes</Label>
@@ -771,7 +1022,8 @@ const MovementDialog = ({ open, onClose, caseId, token, onSuccess }) => {
     from_location: "",
     to_location: "",
     date: new Date().toISOString().split("T")[0],
-    reason: ""
+    reason: "",
+    custom_reason: ""
   });
   const [loading, setLoading] = useState(false);
 
@@ -779,6 +1031,10 @@ const MovementDialog = ({ open, onClose, caseId, token, onSuccess }) => {
     e.preventDefault();
     if (!form.from_location || !form.to_location || !form.reason) {
       toast.error("Please fill all required fields");
+      return;
+    }
+    if (form.reason === "Others" && !form.custom_reason) {
+      toast.error("Please enter the reason");
       return;
     }
     setLoading(true);
@@ -792,7 +1048,7 @@ const MovementDialog = ({ open, onClose, caseId, token, onSuccess }) => {
       toast.success("Movement recorded");
       onSuccess();
       onClose();
-      setForm({ from_location: "", to_location: "", date: new Date().toISOString().split("T")[0], reason: "" });
+      setForm({ from_location: "", to_location: "", date: new Date().toISOString().split("T")[0], reason: "", custom_reason: "" });
     } catch (error) {
       toast.error("Failed to record movement");
     } finally {
@@ -801,6 +1057,7 @@ const MovementDialog = ({ open, onClose, caseId, token, onSuccess }) => {
   };
 
   const locations = ["SEVA Shelter", "Government Shelter", "Private Shelter", "Field Location", "Vet Clinic"];
+  const reasons = ["Transfer", "Recovery", "Treatment", "Emergency", "Release", "Others"];
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -852,14 +1109,24 @@ const MovementDialog = ({ open, onClose, caseId, token, onSuccess }) => {
                 <SelectValue placeholder="Select reason" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="Transfer">Transfer</SelectItem>
-                <SelectItem value="Recovery">Recovery</SelectItem>
-                <SelectItem value="Treatment">Treatment</SelectItem>
-                <SelectItem value="Emergency">Emergency</SelectItem>
-                <SelectItem value="Release">Release</SelectItem>
+                {reasons.map((r) => (
+                  <SelectItem key={r} value={r}>{r}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
+          {form.reason === "Others" && (
+            <div>
+              <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Specify Reason *</Label>
+              <Input
+                value={form.custom_reason}
+                onChange={(e) => setForm({ ...form, custom_reason: e.target.value })}
+                placeholder="Enter reason"
+                className="h-12 mt-1"
+                data-testid="movement-custom-reason"
+              />
+            </div>
+          )}
           <div className="flex gap-3">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-12">
               Cancel
@@ -931,6 +1198,67 @@ const UploadDialog = ({ open, onClose, type, onUpload }) => {
             </Button>
           </div>
         </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const SpecialNoteDialog = ({ open, onClose, caseId, token, onSuccess }) => {
+  const [note, setNote] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!note.trim()) {
+      toast.error("Please enter a note");
+      return;
+    }
+    setLoading(true);
+    try {
+      await axios.post(`${API}/special-notes`, {
+        case_id: caseId,
+        note: note.trim()
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Note added successfully");
+      onSuccess();
+      onClose();
+      setNote("");
+    } catch (error) {
+      toast.error("Failed to add note");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle style={{ fontFamily: 'Manrope' }}>Add Special Note</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Note</Label>
+            <Textarea
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Enter special note for this case..."
+              className="mt-1"
+              rows={4}
+              data-testid="special-note-input"
+            />
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-12">
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading} className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white" data-testid="special-note-submit">
+              {loading ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        </form>
       </DialogContent>
     </Dialog>
   );

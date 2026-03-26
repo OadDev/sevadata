@@ -125,10 +125,10 @@ class CaseCreate(BaseModel):
     area: Optional[str] = None
     reporter_name: Optional[str] = None
     reporter_contact: Optional[str] = None
-    condition: str = "Healthy"
+    condition: Optional[str] = None
     condition_notes: Optional[str] = None
     case_type: str = "Rescue Case"
-    status: str = "Rescue Created"
+    status: str = "Rescued (Status Pending)"
     current_shelter: Optional[str] = None
     arrival_date_seva: Optional[str] = None
     sterilisation_status: str = "Not Required"
@@ -166,7 +166,7 @@ class CaseResponse(BaseModel):
     area: Optional[str] = None
     reporter_name: Optional[str] = None
     reporter_contact: Optional[str] = None
-    condition: str
+    condition: Optional[str] = None
     condition_notes: Optional[str] = None
     case_type: str
     status: str
@@ -186,6 +186,13 @@ class VetCheckupCreate(BaseModel):
     notes: Optional[str] = None
     next_followup_date: Optional[str] = None
 
+class VetCheckupUpdate(BaseModel):
+    checkup_date: Optional[str] = None
+    vet_name: Optional[str] = None
+    notes: Optional[str] = None
+    next_followup_date: Optional[str] = None
+    followup_completed: Optional[bool] = None
+
 class VetCheckupResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
     id: str
@@ -194,6 +201,7 @@ class VetCheckupResponse(BaseModel):
     vet_name: str
     notes: Optional[str] = None
     next_followup_date: Optional[str] = None
+    followup_completed: bool = False
     attachments: List[Dict[str, Any]] = []
     created_at: str
 
@@ -224,6 +232,7 @@ class MovementCreate(BaseModel):
     to_location: str
     date: str
     reason: str
+    custom_reason: Optional[str] = None
 
 class MovementResponse(BaseModel):
     model_config = ConfigDict(extra="ignore")
@@ -233,6 +242,45 @@ class MovementResponse(BaseModel):
     to_location: str
     date: str
     reason: str
+    custom_reason: Optional[str] = None
+    created_at: str
+
+class SpecialNoteCreate(BaseModel):
+    case_id: str
+    note: str
+
+class SpecialNoteResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    case_id: str
+    note: str
+    created_by: str
+    created_at: str
+
+class VetNameCreate(BaseModel):
+    name: str
+    specialization: Optional[str] = None
+    contact: Optional[str] = None
+
+class VetNameResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    name: str
+    specialization: Optional[str] = None
+    contact: Optional[str] = None
+    is_active: bool = True
+    created_at: str
+
+class SterilisationLocationCreate(BaseModel):
+    name: str
+    address: Optional[str] = None
+
+class SterilisationLocationResponse(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str
+    name: str
+    address: Optional[str] = None
+    is_active: bool = True
     created_at: str
 
 # ==================== AUTH HELPERS ====================
@@ -448,6 +496,62 @@ async def get_active_sessions(admin: dict = Depends(require_admin)):
         session["user"] = user
     return sessions
 
+# ==================== VET NAMES MANAGEMENT (Admin) ====================
+
+@api_router.post("/vet-names", response_model=VetNameResponse)
+async def create_vet_name(vet: VetNameCreate, admin: dict = Depends(require_admin)):
+    vet_doc = {
+        "id": str(uuid.uuid4()),
+        **vet.model_dump(),
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.vet_names.insert_one(vet_doc)
+    return VetNameResponse(**vet_doc)
+
+@api_router.get("/vet-names", response_model=List[VetNameResponse])
+async def get_vet_names(user: dict = Depends(get_current_user)):
+    vets = await db.vet_names.find({"is_active": True}, {"_id": 0}).to_list(1000)
+    return [VetNameResponse(**v) for v in vets]
+
+@api_router.delete("/vet-names/{vet_id}")
+async def delete_vet_name(vet_id: str, admin: dict = Depends(require_admin)):
+    result = await db.vet_names.update_one(
+        {"id": vet_id},
+        {"$set": {"is_active": False}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Vet not found")
+    return {"message": "Vet removed successfully"}
+
+# ==================== STERILISATION LOCATIONS MANAGEMENT (Admin) ====================
+
+@api_router.post("/sterilisation-locations", response_model=SterilisationLocationResponse)
+async def create_sterilisation_location(location: SterilisationLocationCreate, admin: dict = Depends(require_admin)):
+    loc_doc = {
+        "id": str(uuid.uuid4()),
+        **location.model_dump(),
+        "is_active": True,
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.sterilisation_locations.insert_one(loc_doc)
+    return SterilisationLocationResponse(**loc_doc)
+
+@api_router.get("/sterilisation-locations", response_model=List[SterilisationLocationResponse])
+async def get_sterilisation_locations(user: dict = Depends(get_current_user)):
+    locations = await db.sterilisation_locations.find({"is_active": True}, {"_id": 0}).to_list(1000)
+    return [SterilisationLocationResponse(**l) for l in locations]
+
+@api_router.delete("/sterilisation-locations/{location_id}")
+async def delete_sterilisation_location(location_id: str, admin: dict = Depends(require_admin)):
+    result = await db.sterilisation_locations.update_one(
+        {"id": location_id},
+        {"$set": {"is_active": False}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Location not found")
+    return {"message": "Location removed successfully"}
+
 # ==================== CASE ENDPOINTS ====================
 
 async def generate_case_id():
@@ -484,6 +588,9 @@ async def get_cases(
     shelter: Optional[str] = None,
     sterilisation_status: Optional[str] = None,
     search: Optional[str] = None,
+    date_filter: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
     user: dict = Depends(get_current_user)
 ):
     query = {"is_deleted": False}
@@ -505,8 +612,87 @@ async def get_cases(
             {"rescue_location": {"$regex": search, "$options": "i"}}
         ]
     
+    # Date filtering
+    now = datetime.now(timezone.utc)
+    if date_filter:
+        if date_filter == "today":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            query["rescue_date"] = start.strftime("%Y-%m-%d")
+        elif date_filter == "yesterday":
+            yesterday = now - timedelta(days=1)
+            query["rescue_date"] = yesterday.strftime("%Y-%m-%d")
+        elif date_filter == "last7days":
+            start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+            query["rescue_date"] = {"$gte": start}
+        elif date_filter == "last30days":
+            start = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+            query["rescue_date"] = {"$gte": start}
+    elif date_from and date_to:
+        query["rescue_date"] = {"$gte": date_from, "$lte": date_to}
+    elif date_from:
+        query["rescue_date"] = {"$gte": date_from}
+    elif date_to:
+        query["rescue_date"] = {"$lte": date_to}
+    
     cases = await db.cases.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
     return [CaseResponse(**c) for c in cases]
+
+@api_router.get("/cases/count")
+async def get_cases_count(
+    status: Optional[str] = None,
+    condition: Optional[str] = None,
+    case_type: Optional[str] = None,
+    shelter: Optional[str] = None,
+    sterilisation_status: Optional[str] = None,
+    search: Optional[str] = None,
+    date_filter: Optional[str] = None,
+    date_from: Optional[str] = None,
+    date_to: Optional[str] = None,
+    user: dict = Depends(get_current_user)
+):
+    query = {"is_deleted": False}
+    
+    if status:
+        query["status"] = status
+    if condition:
+        query["condition"] = condition
+    if case_type:
+        query["case_type"] = case_type
+    if shelter:
+        query["current_shelter"] = shelter
+    if sterilisation_status:
+        query["sterilisation_status"] = sterilisation_status
+    if search:
+        query["$or"] = [
+            {"case_id": {"$regex": search, "$options": "i"}},
+            {"animal_name": {"$regex": search, "$options": "i"}},
+            {"rescue_location": {"$regex": search, "$options": "i"}}
+        ]
+    
+    # Date filtering
+    now = datetime.now(timezone.utc)
+    if date_filter:
+        if date_filter == "today":
+            start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            query["rescue_date"] = start.strftime("%Y-%m-%d")
+        elif date_filter == "yesterday":
+            yesterday = now - timedelta(days=1)
+            query["rescue_date"] = yesterday.strftime("%Y-%m-%d")
+        elif date_filter == "last7days":
+            start = (now - timedelta(days=7)).strftime("%Y-%m-%d")
+            query["rescue_date"] = {"$gte": start}
+        elif date_filter == "last30days":
+            start = (now - timedelta(days=30)).strftime("%Y-%m-%d")
+            query["rescue_date"] = {"$gte": start}
+    elif date_from and date_to:
+        query["rescue_date"] = {"$gte": date_from, "$lte": date_to}
+    elif date_from:
+        query["rescue_date"] = {"$gte": date_from}
+    elif date_to:
+        query["rescue_date"] = {"$lte": date_to}
+    
+    count = await db.cases.count_documents(query)
+    return {"count": count}
 
 @api_router.get("/cases/{case_id}", response_model=CaseResponse)
 async def get_case(case_id: str, user: dict = Depends(get_current_user)):
@@ -646,6 +832,7 @@ async def create_vet_checkup(checkup: VetCheckupCreate, user: dict = Depends(get
     checkup_doc = {
         "id": str(uuid.uuid4()),
         **checkup.model_dump(),
+        "followup_completed": False,
         "attachments": [],
         "created_by": user["id"],
         "created_at": datetime.now(timezone.utc).isoformat()
@@ -661,6 +848,21 @@ async def get_vet_checkups(case_id: Optional[str] = None, user: dict = Depends(g
         query["case_id"] = case_id
     checkups = await db.vet_checkups.find(query, {"_id": 0}).sort("checkup_date", -1).to_list(1000)
     return [VetCheckupResponse(**c) for c in checkups]
+
+@api_router.put("/vet-checkups/{checkup_id}", response_model=VetCheckupResponse)
+async def update_vet_checkup(checkup_id: str, checkup_update: VetCheckupUpdate, user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in checkup_update.model_dump().items() if v is not None}
+    
+    result = await db.vet_checkups.update_one(
+        {"id": checkup_id},
+        {"$set": update_data}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Checkup not found")
+    
+    checkup = await db.vet_checkups.find_one({"id": checkup_id}, {"_id": 0})
+    await log_audit(user["id"], "VET_CHECKUP_UPDATED", f"Updated vet checkup {checkup_id}")
+    return VetCheckupResponse(**checkup)
 
 @api_router.post("/vet-checkups/{checkup_id}/attachments")
 async def upload_checkup_attachment(checkup_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
@@ -790,6 +992,100 @@ async def get_movements(case_id: Optional[str] = None, user: dict = Depends(get_
     movements = await db.movements.find(query, {"_id": 0}).sort("date", -1).to_list(1000)
     return [MovementResponse(**m) for m in movements]
 
+# ==================== SPECIAL NOTES ====================
+
+@api_router.post("/special-notes", response_model=SpecialNoteResponse)
+async def create_special_note(note: SpecialNoteCreate, user: dict = Depends(get_current_user)):
+    case = await db.cases.find_one({"id": note.case_id, "is_deleted": False}, {"_id": 0})
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    note_doc = {
+        "id": str(uuid.uuid4()),
+        **note.model_dump(),
+        "created_by": user["id"],
+        "created_at": datetime.now(timezone.utc).isoformat()
+    }
+    await db.special_notes.insert_one(note_doc)
+    await log_audit(user["id"], "SPECIAL_NOTE_CREATED", f"Added special note for case {case['case_id']}")
+    return SpecialNoteResponse(**note_doc)
+
+@api_router.get("/special-notes", response_model=List[SpecialNoteResponse])
+async def get_special_notes(case_id: Optional[str] = None, user: dict = Depends(get_current_user)):
+    query = {}
+    if case_id:
+        query["case_id"] = case_id
+    notes = await db.special_notes.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return [SpecialNoteResponse(**n) for n in notes]
+
+# ==================== NOTIFICATIONS / FOLLOWUP REMINDERS ====================
+
+@api_router.get("/notifications/followups")
+async def get_followup_notifications(user: dict = Depends(get_current_user)):
+    now = datetime.now(timezone.utc)
+    today = now.strftime("%Y-%m-%d")
+    tomorrow = (now + timedelta(days=1)).strftime("%Y-%m-%d")
+    
+    # Get all pending followups
+    pending_checkups = await db.vet_checkups.find({
+        "next_followup_date": {"$exists": True, "$ne": None, "$ne": ""},
+        "followup_completed": {"$ne": True}
+    }, {"_id": 0}).to_list(1000)
+    
+    notifications = []
+    
+    for checkup in pending_checkups:
+        case = await db.cases.find_one({"id": checkup["case_id"], "is_deleted": False}, {"_id": 0})
+        if not case:
+            continue
+        
+        followup_date = checkup.get("next_followup_date")
+        if not followup_date:
+            continue
+        
+        animal_name = case.get("animal_name") or case.get("animal_type", "Unknown")
+        case_id = case.get("case_id")
+        
+        notification = {
+            "checkup_id": checkup["id"],
+            "case_id": case["id"],
+            "case_number": case_id,
+            "animal_name": animal_name,
+            "followup_date": followup_date,
+            "type": "followup"
+        }
+        
+        if followup_date == today:
+            notification["urgency"] = "today"
+            notification["message"] = f"{animal_name} ({case_id}) has a followup checkup today."
+        elif followup_date == tomorrow:
+            notification["urgency"] = "tomorrow"
+            notification["message"] = f"{animal_name} ({case_id}) has a followup checkup tomorrow."
+        elif followup_date < today:
+            notification["urgency"] = "overdue"
+            notification["message"] = f"{animal_name} ({case_id}) has an overdue followup checkup."
+        else:
+            notification["urgency"] = "upcoming"
+            notification["message"] = f"{animal_name} ({case_id}) has a followup checkup on {followup_date}."
+        
+        notifications.append(notification)
+    
+    # Sort by urgency (overdue first, then today, then tomorrow, then upcoming)
+    urgency_order = {"overdue": 0, "today": 1, "tomorrow": 2, "upcoming": 3}
+    notifications.sort(key=lambda x: (urgency_order.get(x["urgency"], 4), x["followup_date"]))
+    
+    return notifications
+
+@api_router.put("/notifications/followups/{checkup_id}/complete")
+async def mark_followup_complete(checkup_id: str, user: dict = Depends(get_current_user)):
+    result = await db.vet_checkups.update_one(
+        {"id": checkup_id},
+        {"$set": {"followup_completed": True}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Checkup not found")
+    return {"message": "Followup marked as complete"}
+
 # ==================== DASHBOARD METRICS ====================
 
 @api_router.get("/dashboard/metrics")
@@ -799,7 +1095,8 @@ async def get_dashboard_metrics(user: dict = Depends(get_current_user)):
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0).isoformat()
     
     # Case counts
-    total_active = await db.cases.count_documents({"is_deleted": False})
+    total_cases = await db.cases.count_documents({"is_deleted": False})
+    total_active = await db.cases.count_documents({"is_deleted": False, "status": {"$nin": ["Released", "Adopted", "Deceased"]}})
     new_today = await db.cases.count_documents({"is_deleted": False, "created_at": {"$gte": today_start}})
     new_month = await db.cases.count_documents({"is_deleted": False, "created_at": {"$gte": month_start}})
     
@@ -816,7 +1113,7 @@ async def get_dashboard_metrics(user: dict = Depends(get_current_user)):
     
     # Condition counts
     critical = await db.cases.count_documents({"is_deleted": False, "condition": "Critical"})
-    injured = await db.cases.count_documents({"is_deleted": False, "condition": "Injured"})
+    injured = await db.cases.count_documents({"is_deleted": False, "condition": "Injury"})
     sick = await db.cases.count_documents({"is_deleted": False, "condition": "Sick"})
     
     # Sterilisation counts
@@ -828,13 +1125,16 @@ async def get_dashboard_metrics(user: dict = Depends(get_current_user)):
     male_sterilised = await db.sterilisations.count_documents({"gender": "Male"})
     female_sterilised = await db.sterilisations.count_documents({"gender": "Female"})
     
-    # Vet checkups
+    # Vet checkups - followups due
+    today = now.strftime("%Y-%m-%d")
     followups_due = await db.vet_checkups.count_documents({
-        "next_followup_date": {"$lte": now.strftime("%Y-%m-%d")}
+        "next_followup_date": {"$lte": today},
+        "followup_completed": {"$ne": True}
     })
     
     return {
         "cases": {
+            "total": total_cases,
             "total_active": total_active,
             "new_today": new_today,
             "new_month": new_month,
@@ -885,7 +1185,7 @@ async def get_dashboard_charts(user: dict = Depends(get_current_user)):
         })
     
     # Status distribution
-    statuses = ["Rescue Created", "In Govt Shelter", "In SEVA Shelter", "Under Observation", "Released", "Adopted", "Deceased"]
+    statuses = ["Rescued (Status Pending)", "In Govt Shelter", "In SEVA Shelter", "Under Observation", "Released", "Adopted", "Deceased"]
     status_distribution = []
     for status in statuses:
         count = await db.cases.count_documents({"is_deleted": False, "status": status})

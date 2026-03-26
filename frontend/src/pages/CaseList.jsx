@@ -5,6 +5,8 @@ import { API, useAuth } from "../App";
 import { toast } from "sonner";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
+import { Calendar } from "../components/ui/calendar";
+import { Popover, PopoverContent, PopoverTrigger } from "../components/ui/popover";
 import {
   Select,
   SelectContent,
@@ -18,29 +20,35 @@ import {
   Funnel,
   PawPrint,
   MapPin,
-  Calendar,
+  Calendar as CalendarIcon,
   Eye,
   X
 } from "@phosphor-icons/react";
+import { formatDate } from "../utils/dateFormat";
 
 const CaseList = () => {
   const { token } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [cases, setCases] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState(searchParams.get("search") || "");
   const [showFilters, setShowFilters] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [customDateFrom, setCustomDateFrom] = useState(null);
+  const [customDateTo, setCustomDateTo] = useState(null);
   const [filters, setFilters] = useState({
     status: searchParams.get("status") || "",
     condition: searchParams.get("condition") || "",
     case_type: searchParams.get("case_type") || "",
     shelter: searchParams.get("shelter") || "",
-    sterilisation_status: searchParams.get("sterilisation_status") || ""
+    sterilisation_status: searchParams.get("sterilisation_status") || "",
+    date_filter: searchParams.get("date_filter") || ""
   });
 
   useEffect(() => {
     fetchCases();
-  }, [filters, search]);
+  }, [filters, search, customDateFrom, customDateTo]);
 
   const fetchCases = async () => {
     try {
@@ -49,11 +57,19 @@ const CaseList = () => {
       Object.entries(filters).forEach(([key, value]) => {
         if (value) params.append(key, value);
       });
+      if (customDateFrom) params.append("date_from", customDateFrom.toISOString().split('T')[0]);
+      if (customDateTo) params.append("date_to", customDateTo.toISOString().split('T')[0]);
 
-      const response = await axios.get(`${API}/cases?${params.toString()}`, {
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      setCases(response.data);
+      const [casesRes, countRes] = await Promise.all([
+        axios.get(`${API}/cases?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        }),
+        axios.get(`${API}/cases/count?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        })
+      ]);
+      setCases(casesRes.data);
+      setTotalCount(countRes.data.count);
     } catch (error) {
       toast.error("Failed to load cases");
     } finally {
@@ -63,6 +79,11 @@ const CaseList = () => {
 
   const handleFilterChange = (key, value) => {
     const newFilters = { ...filters, [key]: value };
+    // Clear custom dates if selecting preset date filter
+    if (key === "date_filter" && value) {
+      setCustomDateFrom(null);
+      setCustomDateTo(null);
+    }
     setFilters(newFilters);
     
     const params = new URLSearchParams();
@@ -73,26 +94,39 @@ const CaseList = () => {
     setSearchParams(params);
   };
 
+  const handleCustomDateApply = () => {
+    setFilters({ ...filters, date_filter: "" });
+    setShowDatePicker(false);
+  };
+
   const clearFilters = () => {
     setFilters({
       status: "",
       condition: "",
       case_type: "",
       shelter: "",
-      sterilisation_status: ""
+      sterilisation_status: "",
+      date_filter: ""
     });
+    setCustomDateFrom(null);
+    setCustomDateTo(null);
     setSearch("");
     setSearchParams({});
   };
 
-  const hasActiveFilters = Object.values(filters).some(v => v) || search;
+  const hasActiveFilters = Object.values(filters).some(v => v) || search || customDateFrom || customDateTo;
+  const activeFilterCount = Object.values(filters).filter(v => v).length + (search ? 1 : 0) + (customDateFrom || customDateTo ? 1 : 0);
 
   const getConditionClass = (condition) => {
     const classes = {
       Critical: "condition-critical",
-      Injured: "condition-injured",
+      Injury: "condition-injured",
       Sick: "condition-sick",
-      Healthy: "condition-healthy"
+      Accident: "bg-red-600 text-white",
+      Cancer: "bg-purple-600 text-white",
+      "Canine Distemper": "bg-orange-600 text-white",
+      "Parvo Virus": "bg-red-700 text-white",
+      "Not Sure": "bg-gray-500 text-white"
     };
     return classes[condition] || "bg-gray-500 text-white";
   };
@@ -120,7 +154,9 @@ const CaseList = () => {
           <h1 className="text-2xl sm:text-3xl font-bold text-[#1C1917]" style={{ fontFamily: 'Manrope' }}>
             Cases
           </h1>
-          <p className="text-[#57534E] mt-1">{cases.length} total cases</p>
+          <p className="text-[#57534E] mt-1">
+            {hasActiveFilters ? `${totalCount} cases found` : `${totalCount} total cases`}
+          </p>
         </div>
         <Link to="/cases/new">
           <Button 
@@ -154,9 +190,9 @@ const CaseList = () => {
           >
             <Funnel size={20} />
             <span className="ml-2">Filters</span>
-            {hasActiveFilters && (
+            {activeFilterCount > 0 && (
               <span className="ml-2 w-5 h-5 bg-[#4CAF50] text-white text-xs rounded-full flex items-center justify-center">
-                {Object.values(filters).filter(v => v).length + (search ? 1 : 0)}
+                {activeFilterCount}
               </span>
             )}
           </Button>
@@ -165,13 +201,62 @@ const CaseList = () => {
         {/* Filter Panel */}
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-[#E7E5E4]">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3">
+              {/* Date Filter */}
+              <Select value={filters.date_filter} onValueChange={(v) => handleFilterChange("date_filter", v)}>
+                <SelectTrigger className="h-12" data-testid="filter-date">
+                  <SelectValue placeholder="Date Range" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="today">Today</SelectItem>
+                  <SelectItem value="yesterday">Yesterday</SelectItem>
+                  <SelectItem value="last7days">Last 7 Days</SelectItem>
+                  <SelectItem value="last30days">Last 30 Days</SelectItem>
+                </SelectContent>
+              </Select>
+
+              {/* Custom Date Range */}
+              <Popover open={showDatePicker} onOpenChange={setShowDatePicker}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" className="h-12 justify-start border-2" data-testid="custom-date-button">
+                    <CalendarIcon size={18} className="mr-2" />
+                    {customDateFrom && customDateTo 
+                      ? `${formatDate(customDateFrom)} - ${formatDate(customDateTo)}`
+                      : "Custom Date"}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-auto p-4" align="start">
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-sm font-medium mb-2">From Date</p>
+                      <Calendar
+                        mode="single"
+                        selected={customDateFrom}
+                        onSelect={setCustomDateFrom}
+                        initialFocus
+                      />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium mb-2">To Date</p>
+                      <Calendar
+                        mode="single"
+                        selected={customDateTo}
+                        onSelect={setCustomDateTo}
+                      />
+                    </div>
+                    <Button onClick={handleCustomDateApply} className="w-full bg-[#4CAF50] text-white">
+                      Apply
+                    </Button>
+                  </div>
+                </PopoverContent>
+              </Popover>
+
               <Select value={filters.status} onValueChange={(v) => handleFilterChange("status", v)}>
                 <SelectTrigger className="h-12" data-testid="filter-status">
                   <SelectValue placeholder="Status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Rescue Created">Rescue Created</SelectItem>
+                  <SelectItem value="Rescued (Status Pending)">Rescued (Status Pending)</SelectItem>
                   <SelectItem value="In Govt Shelter">In Govt Shelter</SelectItem>
                   <SelectItem value="In Private Shelter">In Private Shelter</SelectItem>
                   <SelectItem value="In SEVA Shelter">In SEVA Shelter</SelectItem>
@@ -188,10 +273,14 @@ const CaseList = () => {
                   <SelectValue placeholder="Condition" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Critical">Critical</SelectItem>
-                  <SelectItem value="Injured">Injured</SelectItem>
+                  <SelectItem value="Accident">Accident</SelectItem>
+                  <SelectItem value="Cancer">Cancer</SelectItem>
+                  <SelectItem value="Injury">Injury</SelectItem>
                   <SelectItem value="Sick">Sick</SelectItem>
-                  <SelectItem value="Healthy">Healthy</SelectItem>
+                  <SelectItem value="Critical">Critical</SelectItem>
+                  <SelectItem value="Canine Distemper">Canine Distemper</SelectItem>
+                  <SelectItem value="Parvo Virus">Parvo Virus</SelectItem>
+                  <SelectItem value="Not Sure">Not Sure</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -202,17 +291,6 @@ const CaseList = () => {
                 <SelectContent>
                   <SelectItem value="Rescue Case">Rescue Case</SelectItem>
                   <SelectItem value="Sterilisation Only Case">Sterilisation Only</SelectItem>
-                </SelectContent>
-              </Select>
-
-              <Select value={filters.shelter} onValueChange={(v) => handleFilterChange("shelter", v)}>
-                <SelectTrigger className="h-12" data-testid="filter-shelter">
-                  <SelectValue placeholder="Shelter" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="SEVA Shelter">SEVA Shelter</SelectItem>
-                  <SelectItem value="Government Shelter">Government Shelter</SelectItem>
-                  <SelectItem value="Private Shelter">Private Shelter</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -274,9 +352,13 @@ const CaseCard = ({ caseData }) => {
   const getConditionClass = (condition) => {
     const classes = {
       Critical: "condition-critical",
-      Injured: "condition-injured",
+      Injury: "condition-injured",
       Sick: "condition-sick",
-      Healthy: "condition-healthy"
+      Accident: "bg-red-600 text-white",
+      Cancer: "bg-purple-600 text-white",
+      "Canine Distemper": "bg-orange-600 text-white",
+      "Parvo Virus": "bg-red-700 text-white",
+      "Not Sure": "bg-gray-500 text-white"
     };
     return classes[condition] || "bg-gray-500 text-white";
   };
@@ -293,8 +375,8 @@ const CaseCard = ({ caseData }) => {
     "https://images.unsplash.com/photo-1733783506192-653df6185a7d?w=200&h=200&fit=crop"
   ];
 
-  const imageUrl = caseData.images?.[0] 
-    ? null // Will handle actual images later
+  const imageUrl = caseData.images?.length > 0 
+    ? null 
     : placeholderImages[Math.floor(Math.random() * placeholderImages.length)];
 
   return (
@@ -325,9 +407,11 @@ const CaseCard = ({ caseData }) => {
             <span className="text-sm font-mono font-semibold text-[#4CAF50]">
               {caseData.case_id}
             </span>
-            <span className={`px-2 py-0.5 text-xs font-semibold rounded ${getConditionClass(caseData.condition)}`}>
-              {caseData.condition}
-            </span>
+            {caseData.condition && (
+              <span className={`px-2 py-0.5 text-xs font-semibold rounded ${getConditionClass(caseData.condition)}`}>
+                {caseData.condition}
+              </span>
+            )}
             <span className={`px-2 py-0.5 text-xs font-medium rounded ${getStatusClass(caseData.status)}`}>
               {caseData.status}
             </span>
@@ -343,8 +427,8 @@ const CaseCard = ({ caseData }) => {
               <span className="truncate max-w-[150px]">{caseData.rescue_location}</span>
             </span>
             <span className="flex items-center gap-1">
-              <Calendar size={16} />
-              {new Date(caseData.rescue_date).toLocaleDateString()}
+              <CalendarIcon size={16} />
+              {formatDate(caseData.rescue_date)}
             </span>
           </div>
 

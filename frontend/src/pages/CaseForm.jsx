@@ -19,7 +19,11 @@ import {
   PawPrint,
   MapPin,
   User,
-  FirstAid
+  FirstAid,
+  Camera,
+  VideoCamera,
+  X,
+  Upload
 } from "@phosphor-icons/react";
 
 const CaseForm = () => {
@@ -30,6 +34,9 @@ const CaseForm = () => {
 
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(isEditing);
+  const [uploadingMedia, setUploadingMedia] = useState(false);
+  const [pendingImages, setPendingImages] = useState([]);
+  const [pendingVideos, setPendingVideos] = useState([]);
   const [form, setForm] = useState({
     animal_name: "",
     animal_type: "Dog",
@@ -41,10 +48,10 @@ const CaseForm = () => {
     area: "",
     reporter_name: "",
     reporter_contact: "",
-    condition: "Healthy",
+    condition: "",
     condition_notes: "",
     case_type: "Rescue Case",
-    status: "Rescue Created",
+    status: "Rescued (Status Pending)",
     current_shelter: "",
     arrival_date_seva: "",
     sterilisation_status: "Not Required"
@@ -70,6 +77,50 @@ const CaseForm = () => {
     }
   };
 
+  const handleImageSelect = (e) => {
+    const files = Array.from(e.target.files);
+    setPendingImages([...pendingImages, ...files]);
+  };
+
+  const handleVideoSelect = (e) => {
+    const files = Array.from(e.target.files);
+    setPendingVideos([...pendingVideos, ...files]);
+  };
+
+  const removeImage = (index) => {
+    setPendingImages(pendingImages.filter((_, i) => i !== index));
+  };
+
+  const removeVideo = (index) => {
+    setPendingVideos(pendingVideos.filter((_, i) => i !== index));
+  };
+
+  const uploadMedia = async (caseId) => {
+    // Upload images
+    for (const file of pendingImages) {
+      const formData = new FormData();
+      formData.append("file", file);
+      await axios.post(`${API}/cases/${caseId}/images`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data"
+        }
+      });
+    }
+    
+    // Upload videos
+    for (const file of pendingVideos) {
+      const formData = new FormData();
+      formData.append("file", file);
+      await axios.post(`${API}/cases/${caseId}/videos`, formData, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "multipart/form-data"
+        }
+      });
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     
@@ -80,6 +131,8 @@ const CaseForm = () => {
 
     setLoading(true);
     try {
+      let caseId = id;
+      
       if (isEditing) {
         await axios.put(`${API}/cases/${id}`, form, {
           headers: { Authorization: `Bearer ${token}` }
@@ -89,11 +142,23 @@ const CaseForm = () => {
         const response = await axios.post(`${API}/cases`, form, {
           headers: { Authorization: `Bearer ${token}` }
         });
+        caseId = response.data.id;
         toast.success("Case created successfully");
-        navigate(`/cases/${response.data.id}`);
-        return;
       }
-      navigate(`/cases/${id}`);
+
+      // Upload any pending media
+      if (pendingImages.length > 0 || pendingVideos.length > 0) {
+        setUploadingMedia(true);
+        try {
+          await uploadMedia(caseId);
+          toast.success("Media uploaded successfully");
+        } catch (error) {
+          toast.error("Some media failed to upload");
+        }
+        setUploadingMedia(false);
+      }
+
+      navigate(`/cases/${caseId}`);
     } catch (error) {
       toast.error(isEditing ? "Failed to update case" : "Failed to create case");
     } finally {
@@ -104,6 +169,31 @@ const CaseForm = () => {
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
+
+  const isSterilisationOnly = form.case_type === "Sterilisation Only Case";
+
+  const conditions = [
+    "Accident",
+    "Cancer",
+    "Injury",
+    "Sick",
+    "Critical",
+    "Canine Distemper",
+    "Parvo Virus",
+    "Not Sure"
+  ];
+
+  const statuses = [
+    "Rescued (Status Pending)",
+    "In Govt Shelter",
+    "In Private Shelter",
+    "In SEVA Shelter",
+    "Under Observation",
+    "Released",
+    "Permanent Resident",
+    "Adopted",
+    "Deceased"
+  ];
 
   if (fetching) {
     return (
@@ -302,27 +392,17 @@ const CaseForm = () => {
             Case Status
           </h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">
-                Condition *
-              </Label>
-              <Select value={form.condition} onValueChange={(v) => updateField("condition", v)}>
-                <SelectTrigger className="h-12 mt-1" data-testid="condition-select">
-                  <SelectValue placeholder="Select condition" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Critical">Critical</SelectItem>
-                  <SelectItem value="Injured">Injured</SelectItem>
-                  <SelectItem value="Sick">Sick</SelectItem>
-                  <SelectItem value="Healthy">Healthy</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* Case Type comes BEFORE Condition */}
             <div>
               <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">
                 Case Type
               </Label>
-              <Select value={form.case_type} onValueChange={(v) => updateField("case_type", v)}>
+              <Select value={form.case_type} onValueChange={(v) => {
+                updateField("case_type", v);
+                if (v === "Sterilisation Only Case") {
+                  updateField("condition", "");
+                }
+              }}>
                 <SelectTrigger className="h-12 mt-1" data-testid="case-type-select">
                   <SelectValue placeholder="Select type" />
                 </SelectTrigger>
@@ -332,6 +412,28 @@ const CaseForm = () => {
                 </SelectContent>
               </Select>
             </div>
+            
+            {/* Condition - disabled if Sterilisation Only */}
+            <div>
+              <Label className={`text-xs font-bold uppercase tracking-wider ${isSterilisationOnly ? 'text-[#A8A29E]' : 'text-[#57534E]'}`}>
+                Condition {isSterilisationOnly && "(N/A)"}
+              </Label>
+              <Select 
+                value={form.condition || ""} 
+                onValueChange={(v) => updateField("condition", v)}
+                disabled={isSterilisationOnly}
+              >
+                <SelectTrigger className={`h-12 mt-1 ${isSterilisationOnly ? 'opacity-50 cursor-not-allowed' : ''}`} data-testid="condition-select">
+                  <SelectValue placeholder={isSterilisationOnly ? "Not applicable" : "Select condition"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {conditions.map((c) => (
+                    <SelectItem key={c} value={c}>{c}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            
             <div>
               <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">
                 Status
@@ -341,15 +443,9 @@ const CaseForm = () => {
                   <SelectValue placeholder="Select status" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="Rescue Created">Rescue Created</SelectItem>
-                  <SelectItem value="In Govt Shelter">In Govt Shelter</SelectItem>
-                  <SelectItem value="In Private Shelter">In Private Shelter</SelectItem>
-                  <SelectItem value="In SEVA Shelter">In SEVA Shelter</SelectItem>
-                  <SelectItem value="Under Observation">Under Observation</SelectItem>
-                  <SelectItem value="Released">Released</SelectItem>
-                  <SelectItem value="Permanent Resident">Permanent Resident</SelectItem>
-                  <SelectItem value="Adopted">Adopted</SelectItem>
-                  <SelectItem value="Deceased">Deceased</SelectItem>
+                  {statuses.map((s) => (
+                    <SelectItem key={s} value={s}>{s}</SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
@@ -411,6 +507,89 @@ const CaseForm = () => {
           </div>
         </div>
 
+        {/* Media Upload (Optional) */}
+        <div className="bg-white border border-[#E7E5E4] rounded-lg p-5">
+          <h2 className="text-lg font-semibold text-[#1C1917] mb-4 flex items-center gap-2" style={{ fontFamily: 'Manrope' }}>
+            <Camera size={22} className="text-[#4CAF50]" />
+            Photos & Videos (Optional)
+          </h2>
+          
+          <div className="space-y-4">
+            {/* Image Upload */}
+            <div>
+              <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">
+                Photos
+              </Label>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {pendingImages.map((file, idx) => (
+                  <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden bg-[#F5F5F4]">
+                    <img 
+                      src={URL.createObjectURL(file)} 
+                      alt={`Preview ${idx}`}
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => removeImage(idx)}
+                      className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                <label className="w-20 h-20 rounded-lg border-2 border-dashed border-[#E7E5E4] flex flex-col items-center justify-center cursor-pointer hover:border-[#4CAF50] transition-colors">
+                  <Camera size={24} className="text-[#78716C]" />
+                  <span className="text-xs text-[#78716C] mt-1">Add</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    onChange={handleImageSelect}
+                    className="hidden"
+                    data-testid="image-upload-input"
+                  />
+                </label>
+              </div>
+            </div>
+
+            {/* Video Upload */}
+            <div>
+              <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">
+                Videos
+              </Label>
+              <div className="mt-2 flex flex-wrap gap-3">
+                {pendingVideos.map((file, idx) => (
+                  <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden bg-[#F5F5F4] flex items-center justify-center">
+                    <VideoCamera size={32} className="text-[#78716C]" />
+                    <span className="absolute bottom-1 text-xs text-[#57534E] truncate w-full text-center px-1">
+                      {file.name.slice(0, 8)}...
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => removeVideo(idx)}
+                      className="absolute top-1 right-1 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center"
+                    >
+                      <X size={12} />
+                    </button>
+                  </div>
+                ))}
+                <label className="w-20 h-20 rounded-lg border-2 border-dashed border-[#E7E5E4] flex flex-col items-center justify-center cursor-pointer hover:border-[#4CAF50] transition-colors">
+                  <VideoCamera size={24} className="text-[#78716C]" />
+                  <span className="text-xs text-[#78716C] mt-1">Add</span>
+                  <input
+                    type="file"
+                    accept="video/*"
+                    multiple
+                    onChange={handleVideoSelect}
+                    className="hidden"
+                    data-testid="video-upload-input"
+                  />
+                </label>
+              </div>
+            </div>
+          </div>
+        </div>
+
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3">
           <Button
@@ -424,14 +603,14 @@ const CaseForm = () => {
           </Button>
           <Button
             type="submit"
-            disabled={loading}
+            disabled={loading || uploadingMedia}
             className="h-14 flex-1 bg-[#4CAF50] hover:bg-[#43A047] text-white font-semibold"
             data-testid="submit-button"
           >
-            {loading ? (
+            {loading || uploadingMedia ? (
               <div className="flex items-center gap-2">
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                {isEditing ? "Updating..." : "Creating..."}
+                {uploadingMedia ? "Uploading Media..." : isEditing ? "Updating..." : "Creating..."}
               </div>
             ) : (
               isEditing ? "Update Case" : "Create Case"
