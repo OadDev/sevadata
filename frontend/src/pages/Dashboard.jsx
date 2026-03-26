@@ -149,8 +149,8 @@ const Dashboard = () => {
           <h3 className="text-lg font-semibold text-[#1C1917] mb-4" style={{ fontFamily: 'Manrope' }}>
             Rescue Trends (Last 7 Days)
           </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div style={{ width: '100%', height: 256 }}>
+            <ResponsiveContainer width="100%" height={256}>
               <BarChart data={charts?.rescue_trends || []}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#E7E5E4" />
                 <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#78716C" />
@@ -173,8 +173,8 @@ const Dashboard = () => {
           <h3 className="text-lg font-semibold text-[#1C1917] mb-4" style={{ fontFamily: 'Manrope' }}>
             Case Status Distribution
           </h3>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
+          <div style={{ width: '100%', height: 256 }}>
+            <ResponsiveContainer width="100%" height={256}>
               <PieChart>
                 <Pie
                   data={charts?.status_distribution || []}

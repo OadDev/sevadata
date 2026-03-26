@@ -322,30 +322,38 @@ async def login(login_data: UserLogin):
     if user.get("is_blocked"):
         raise HTTPException(status_code=403, detail=f"Your ID has been blocked because {user.get('blocked_reason', 'multiple device login was detected')}. Please contact admin.")
     
-    # Check for existing active sessions on different devices
-    existing_session = await db.sessions.find_one({
-        "user_id": user["id"],
-        "is_active": True,
-        "device_id": {"$ne": login_data.device_id}
-    }, {"_id": 0})
+    # Check for existing active sessions on different devices (Admin users bypass this check)
+    if user.get("role") != "admin":
+        existing_session = await db.sessions.find_one({
+            "user_id": user["id"],
+            "is_active": True,
+            "device_id": {"$ne": login_data.device_id}
+        }, {"_id": 0})
+        
+        if existing_session:
+            # Block user for multiple device login
+            await db.users.update_one(
+                {"id": user["id"]},
+                {"$set": {
+                    "is_blocked": True,
+                    "blocked_reason": "Multiple device login detected",
+                    "blocked_at": datetime.now(timezone.utc).isoformat()
+                }}
+            )
+            # Deactivate all sessions
+            await db.sessions.update_many(
+                {"user_id": user["id"]},
+                {"$set": {"is_active": False}}
+            )
+            await log_audit(user["id"], "USER_BLOCKED", "Blocked due to multiple device login attempt")
+            raise HTTPException(status_code=403, detail="Your ID has been blocked because multiple device login was detected. Please contact admin.")
     
-    if existing_session:
-        # Block user for multiple device login
-        await db.users.update_one(
-            {"id": user["id"]},
-            {"$set": {
-                "is_blocked": True,
-                "blocked_reason": "Multiple device login detected",
-                "blocked_at": datetime.now(timezone.utc).isoformat()
-            }}
-        )
-        # Deactivate all sessions
+    # For admin users, just deactivate old sessions without blocking
+    if user.get("role") == "admin":
         await db.sessions.update_many(
             {"user_id": user["id"]},
             {"$set": {"is_active": False}}
         )
-        await log_audit(user["id"], "USER_BLOCKED", "Blocked due to multiple device login attempt")
-        raise HTTPException(status_code=403, detail="Your ID has been blocked because multiple device login was detected. Please contact admin.")
     
     # Deactivate any existing session on same device
     await db.sessions.update_many(
