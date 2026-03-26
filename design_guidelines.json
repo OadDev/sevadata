@@ -1,0 +1,114 @@
+{
+  "theme_and_archetype": {
+    "domain": "Animal Rescue & Field Operations",
+    "theme": "Light Theme",
+    "archetype": "Archetype 1 (Organic & Earthy) blended with 'Tactical Minimalism' for field ops",
+    "reasoning": "A light theme with high contrast is mandatory for outdoor field usage (reducing sun glare). The organic green palette builds trust, while the tactical execution (stark borders, no soft shadows, large touch targets) ensures fast, error-free data entry by field workers."
+  },
+  "colors": {
+    "primary": {
+      "DEFAULT": "#4CAF50",
+      "hover": "#43A047",
+      "active": "#388E3C",
+      "foreground": "#FFFFFF"
+    },
+    "secondary": {
+      "DEFAULT": "#1B5E20",
+      "foreground": "#FFFFFF"
+    },
+    "background": {
+      "app": "#F9FAFB",
+      "card": "#FFFFFF",
+      "overlay": "rgba(28, 25, 23, 0.7)"
+    },
+    "text": {
+      "primary": "#1C1917",
+      "secondary": "#57534E",
+      "muted": "#78716C"
+    },
+    "borders": {
+      "default": "#E7E5E4",
+      "focus": "#4CAF50"
+    },
+    "status": {
+      "critical": "#DC2626",
+      "warning": "#F59E0B",
+      "success": "#16A34A"
+    }
+  },
+  "typography": {
+    "fonts": {
+      "headings": "Manrope, sans-serif",
+      "body": "Work Sans, sans-serif",
+      "data_entry": "IBM Plex Sans, monospace"
+    },
+    "scale": {
+      "h1": "text-3xl sm:text-4xl font-black tracking-tight text-[#1C1917]",
+      "h2": "text-xl sm:text-2xl font-bold tracking-tight text-[#1C1917]",
+      "h3": "text-lg font-semibold text-[#1C1917]",
+      "body": "text-base leading-relaxed text-[#1C1917]",
+      "label": "text-xs font-bold uppercase tracking-[0.1em] text-[#57534E]"
+    },
+    "rules": "Never use Inter for headings. Keep hierarchy tight. Avoid centering text in data-heavy or form screens—left-align for rapid scanning. Use explicit text colors on hover states."
+  },
+  "spacing_and_layout": {
+    "strategy": "Mobile-First Field Operations Layout",
+    "padding": {
+      "screen": "p-4 sm:p-6",
+      "card": "p-5 sm:p-8",
+      "input_fields": "p-4"
+    },
+    "grids": "MODE B: 'CONTROL ROOM' GRID for the Dashboard. Tight gaps (gap-4). For case lists, stack vertically as wide cards.",
+    "touch_targets": "CRITICAL: All buttons, tabs, and select fields MUST be a minimum of h-12 (48px) or h-14 (56px) for easy tapping outdoors with gloved/dirty hands."
+  },
+  "surface_and_borders": {
+    "strategy": "GRID BORDERS & TACTILE CRISPNESS",
+    "cards": "Solid #FFFFFF background, crisp 1px border (#E7E5E4). NO drop shadows, as they render poorly in bright sunlight and muddy the interface.",
+    "inputs": "Solid borders, slightly thicker (2px) on focus with #4CAF50 ring. Background of input fields should be slightly off-white (#F5F5F4) when idle, turning pure white on focus.",
+    "header": "Solid white background with a hard bottom border. Sticky top z-50. NO glassmorphism—it reduces legibility outdoors."
+  },
+  "components_strategy": {
+    "buttons": "Large, blocky, h-14. Primary button uses #4CAF50. No rounded-full (pill) shapes; use rounded-lg for a sturdy, reliable feel.",
+    "tabs": "Override default Shadcn tabs height. Use h-12. Active tab gets a stark #4CAF50 bottom border or solid background.",
+    "forms": "Use Shadcn customized for high-contrast. Labels must be bold and uppercase.",
+    "icons": "Use @phosphor-icons/react (Duotone or Bold weights) for distinct, high-contrast visual cues."
+  },
+  "media_and_images": {
+    "logo": {
+      "url": "https://customer-assets.emergentagent.com/job_e14815e9-182a-412c-afe6-1bef3f9a8c01/artifacts/vf48chjp_seva-logo-1.png",
+      "alt": "SEVA Shelter Management Logo",
+      "placement": "Header nav (left aligned), Login screen hero"
+    },
+    "hero_login": {
+      "url": "https://images.unsplash.com/photo-1643786262383-71182213ac13?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjd8MHwxfHNlYXJjaHwyfHxhbmltYWwlMjByZXNjdWUlMjBkb2clMjBzaGVsdGVyfGVufDB8fHx8MTc3NDUxOTgzOHww&ixlib=rb-4.1.0&q=85",
+      "alt": "Black dog resting on green grass field",
+      "placement": "Background or side panel for desktop login/auth screens. Use a black/50 overlay if placing text over it."
+    },
+    "placeholder_cases": [
+      {
+        "url": "https://images.unsplash.com/photo-1643786261573-9838e66d89dc?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjAzMjd8MHwxfHNlYXJjaHw0fHxhbmltYWwlMjByZXNjdWUlMjBkb2clMjBzaGVsdGVyfGVufDB8fHx8MTc3NDUxOTgzOHww&ixlib=rb-4.1.0&q=85",
+        "alt": "Rescue dog looking up"
+      },
+      {
+        "url": "https://images.unsplash.com/photo-1733783506192-653df6185a7d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w3NDQ2MzR8MHwxfHNlYXJjaHwzfHx2ZXRlcmluYXJ5JTIwY2xpbmljJTIwY2F0fGVufDB8fHx8MTc3NDUxOTg0MHww&ixlib=rb-4.1.0&q=85",
+        "alt": "White cat vet checkup"
+      }
+    ]
+  },
+  "accessibility_and_testing": {
+    "contrast": "Ensure all text against the green #4CAF50 background meets APCA/WCAG ratios (use #FFFFFF or #000000 depending on contrast).",
+    "motion": "Keep animations fast (150ms). Do not use long, sweeping animations that slow down field workers.",
+    "testing": "CRITICAL: All interactive elements (buttons, inputs, tabs, links, case cards) MUST have a 'data-testid' attribute using kebab-case role-based naming (e.g., 'submit-case-button', 'case-status-tab')."
+  },
+  "instructions_to_main_agent": [
+    "Read this design_guidelines.json completely before writing any UI code.",
+    "Install required dependencies: yarn add @phosphor-icons/react",
+    "Apply Manrope for Headings and Work Sans for body text.",
+    "Design mobile-first. Assume the primary device is a smartphone used outdoors.",
+    "Use solid borders and backgrounds instead of shadows and glassmorphism.",
+    "Ensure all buttons, form inputs, and touch targets are large (min h-12) to accommodate field usage.",
+    "Integrate the SEVA logo provided in the media section.",
+    "For dummy data in case lists, use the placeholder_cases images.",
+    "Add 'data-testid' to every actionable element."
+  ]
+}
