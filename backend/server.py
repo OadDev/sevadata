@@ -176,6 +176,8 @@ class CaseResponse(BaseModel):
     images: List[Dict[str, Any]] = []
     videos: List[Dict[str, Any]] = []
     is_deleted: bool = False
+    created_by: Optional[str] = None
+    created_by_name: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -203,6 +205,7 @@ class VetCheckupResponse(BaseModel):
     next_followup_date: Optional[str] = None
     followup_completed: bool = False
     attachments: List[Dict[str, Any]] = []
+    prescription: Optional[Dict[str, Any]] = None
     created_at: str
 
 class SterilisationCreate(BaseModel):
@@ -446,6 +449,31 @@ async def logout(user: dict = Depends(get_current_user)):
 async def get_me(user: dict = Depends(get_current_user)):
     return UserResponse(**user)
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+@api_router.put("/auth/change-password")
+async def change_password(password_data: PasswordChange, user: dict = Depends(get_current_user)):
+    # Get user with password
+    user_doc = await db.users.find_one({"id": user["id"]}, {"_id": 0})
+    if not user_doc:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Verify current password
+    if not verify_password(password_data.current_password, user_doc["password"]):
+        raise HTTPException(status_code=400, detail="Current password is incorrect")
+    
+    # Update password
+    new_hashed = hash_password(password_data.new_password)
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"password": new_hashed}}
+    )
+    
+    await log_audit(user["id"], "PASSWORD_CHANGED", "User changed their password")
+    return {"message": "Password changed successfully"}
+
 # ==================== USER MANAGEMENT (Admin) ====================
 
 @api_router.get("/users", response_model=List[UserResponse])
@@ -573,6 +601,7 @@ async def create_case(case: CaseCreate, user: dict = Depends(get_current_user)):
         "deleted_by": None,
         "deleted_at": None,
         "created_by": user["id"],
+        "created_by_name": user.get("name", "Unknown"),
         "created_at": now,
         "updated_at": now
     }
@@ -743,25 +772,33 @@ MIME_TYPES = {
 }
 
 @api_router.post("/cases/{case_id}/images")
-async def upload_case_image(case_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+async def upload_case_image(
+    case_id: str, 
+    file: UploadFile = File(...), 
+    description: str = Query(..., description="Description/note for the image"),
+    user: dict = Depends(get_current_user)
+):
     case = await db.cases.find_one({"id": case_id, "is_deleted": False}, {"_id": 0})
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     
     ext = file.filename.split(".")[-1].lower() if "." in file.filename else "bin"
-    path = f"{APP_NAME}/cases/{case_id}/images/{uuid.uuid4()}.{ext}"
+    file_id = str(uuid.uuid4())
+    path = f"{APP_NAME}/cases/{case_id}/images/{file_id}.{ext}"
     data = await file.read()
     content_type = MIME_TYPES.get(ext, file.content_type or "application/octet-stream")
     
     result = put_object(path, data, content_type)
     
     image_doc = {
-        "id": str(uuid.uuid4()),
+        "id": file_id,
         "storage_path": result["path"],
         "original_filename": file.filename,
+        "description": description,
         "content_type": content_type,
         "size": result.get("size", len(data)),
         "uploaded_by": user["id"],
+        "uploaded_by_name": user.get("name", "Unknown"),
         "uploaded_at": datetime.now(timezone.utc).isoformat()
     }
     
@@ -773,25 +810,33 @@ async def upload_case_image(case_id: str, file: UploadFile = File(...), user: di
     return image_doc
 
 @api_router.post("/cases/{case_id}/videos")
-async def upload_case_video(case_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+async def upload_case_video(
+    case_id: str, 
+    file: UploadFile = File(...), 
+    description: str = Query(..., description="Description/note for the video"),
+    user: dict = Depends(get_current_user)
+):
     case = await db.cases.find_one({"id": case_id, "is_deleted": False}, {"_id": 0})
     if not case:
         raise HTTPException(status_code=404, detail="Case not found")
     
     ext = file.filename.split(".")[-1].lower() if "." in file.filename else "bin"
-    path = f"{APP_NAME}/cases/{case_id}/videos/{uuid.uuid4()}.{ext}"
+    file_id = str(uuid.uuid4())
+    path = f"{APP_NAME}/cases/{case_id}/videos/{file_id}.{ext}"
     data = await file.read()
     content_type = MIME_TYPES.get(ext, file.content_type or "application/octet-stream")
     
     result = put_object(path, data, content_type)
     
     video_doc = {
-        "id": str(uuid.uuid4()),
+        "id": file_id,
         "storage_path": result["path"],
         "original_filename": file.filename,
+        "description": description,
         "content_type": content_type,
         "size": result.get("size", len(data)),
         "uploaded_by": user["id"],
+        "uploaded_by_name": user.get("name", "Unknown"),
         "uploaded_at": datetime.now(timezone.utc).isoformat()
     }
     
@@ -894,6 +939,37 @@ async def upload_checkup_attachment(checkup_id: str, file: UploadFile = File(...
     
     return attachment_doc
 
+@api_router.post("/vet-checkups/{checkup_id}/prescription")
+async def upload_checkup_prescription(checkup_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    checkup = await db.vet_checkups.find_one({"id": checkup_id}, {"_id": 0})
+    if not checkup:
+        raise HTTPException(status_code=404, detail="Vet checkup not found")
+    
+    ext = file.filename.split(".")[-1].lower() if "." in file.filename else "bin"
+    path = f"{APP_NAME}/vet_checkups/{checkup_id}/prescription_{uuid.uuid4()}.{ext}"
+    data = await file.read()
+    content_type = MIME_TYPES.get(ext, file.content_type or "application/octet-stream")
+    
+    result = put_object(path, data, content_type)
+    
+    prescription_doc = {
+        "id": str(uuid.uuid4()),
+        "storage_path": result["path"],
+        "original_filename": file.filename,
+        "content_type": content_type,
+        "size": result.get("size", len(data)),
+        "uploaded_by": user["id"],
+        "uploaded_by_name": user.get("name", "Unknown"),
+        "uploaded_at": datetime.now(timezone.utc).isoformat()
+    }
+    
+    await db.vet_checkups.update_one(
+        {"id": checkup_id},
+        {"$set": {"prescription": prescription_doc}}
+    )
+    
+    return prescription_doc
+
 # ==================== STERILISATION ENDPOINTS ====================
 
 @api_router.post("/sterilisations", response_model=SterilisationResponse)
@@ -928,6 +1004,28 @@ async def get_sterilisations(case_id: Optional[str] = None, user: dict = Depends
         query["case_id"] = case_id
     sterilisations = await db.sterilisations.find(query, {"_id": 0}).sort("sterilisation_date", -1).to_list(1000)
     return [SterilisationResponse(**s) for s in sterilisations]
+
+class SterilisationUpdate(BaseModel):
+    sterilisation_date: Optional[str] = None
+    gender: Optional[str] = None
+    location: Optional[str] = None
+    vet_name: Optional[str] = None
+    notes: Optional[str] = None
+
+@api_router.put("/sterilisations/{sterilisation_id}", response_model=SterilisationResponse)
+async def update_sterilisation(sterilisation_id: str, sterilisation_update: SterilisationUpdate, user: dict = Depends(get_current_user)):
+    update_data = {k: v for k, v in sterilisation_update.model_dump().items() if v is not None}
+    
+    result = await db.sterilisations.update_one(
+        {"id": sterilisation_id},
+        {"$set": update_data}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Sterilisation record not found")
+    
+    sterilisation = await db.sterilisations.find_one({"id": sterilisation_id}, {"_id": 0})
+    await log_audit(user["id"], "STERILISATION_UPDATED", f"Updated sterilisation record {sterilisation_id}")
+    return SterilisationResponse(**sterilisation)
 
 @api_router.post("/sterilisations/{sterilisation_id}/photos")
 async def upload_sterilisation_photo(sterilisation_id: str, file: UploadFile = File(...), user: dict = Depends(get_current_user)):

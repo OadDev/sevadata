@@ -31,13 +31,14 @@ import {
   FirstAid,
   Syringe,
   MapPin,
-  Calendar,
   House,
   ClockCounterClockwise,
   Upload,
   X,
   PawPrint,
-  Note
+  Note,
+  User,
+  FileText
 } from "@phosphor-icons/react";
 import { formatDate, formatTime, formatTimestamp } from "../utils/dateFormat";
 
@@ -60,6 +61,8 @@ const CaseDetail = () => {
   const [showEditVetDialog, setShowEditVetDialog] = useState(false);
   const [editingCheckup, setEditingCheckup] = useState(null);
   const [showSterilDialog, setShowSterilDialog] = useState(false);
+  const [showEditSterilDialog, setShowEditSterilDialog] = useState(false);
+  const [editingSteril, setEditingSteril] = useState(null);
   const [showMovementDialog, setShowMovementDialog] = useState(false);
   const [showUploadDialog, setShowUploadDialog] = useState(false);
   const [showNoteDialog, setShowNoteDialog] = useState(false);
@@ -108,13 +111,13 @@ const CaseDetail = () => {
     }
   };
 
-  const handleUpload = async (file, type) => {
+  const handleUpload = async (file, type, description) => {
     const formData = new FormData();
     formData.append("file", file);
 
     try {
       const endpoint = type === "image" ? "images" : "videos";
-      await axios.post(`${API}/cases/${id}/${endpoint}`, formData, {
+      await axios.post(`${API}/cases/${id}/${endpoint}?description=${encodeURIComponent(description)}`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data"
@@ -131,6 +134,11 @@ const CaseDetail = () => {
   const openEditCheckup = (checkup) => {
     setEditingCheckup(checkup);
     setShowEditVetDialog(true);
+  };
+
+  const openEditSteril = (steril) => {
+    setEditingSteril(steril);
+    setShowEditSterilDialog(true);
   };
 
   const getConditionClass = (condition) => {
@@ -152,6 +160,11 @@ const CaseDetail = () => {
     if (["Under Observation", "In Govt Shelter", "In Private Shelter"].includes(status)) return "status-warning";
     if (["Released", "Adopted"].includes(status)) return "status-success";
     return "status-info";
+  };
+
+  // Generate image URL from storage path
+  const getImageUrl = (storagePath) => {
+    return `${API}/files/${storagePath}?auth=${token}`;
   };
 
   if (loading) {
@@ -213,7 +226,7 @@ const CaseDetail = () => {
         </div>
       </div>
 
-      {/* Status Bar */}
+      {/* Status Bar with Creator Info */}
       <div className="bg-white border border-[#E7E5E4] rounded-lg p-4 flex flex-wrap items-center gap-4">
         <span className={`px-3 py-1 text-sm font-medium rounded ${getStatusClass(caseData.status)}`}>
           {caseData.status}
@@ -227,6 +240,10 @@ const CaseDetail = () => {
         <span className="flex items-center gap-2 text-sm text-[#57534E]">
           <Syringe size={18} />
           Sterilisation: {caseData.sterilisation_status}
+        </span>
+        <span className="flex items-center gap-2 text-sm text-[#78716C] ml-auto">
+          <User size={18} />
+          Added by {caseData.created_by_name || "Unknown"} on {formatTimestamp(caseData.created_at)}
         </span>
       </div>
 
@@ -345,6 +362,17 @@ const CaseDetail = () => {
                       {checkup.notes}
                     </p>
                   )}
+                  {checkup.prescription && (
+                    <div className="mt-3 p-3 bg-blue-50 rounded flex items-center gap-2">
+                      <FileText size={18} className="text-blue-600" />
+                      <span className="text-sm text-blue-700">
+                        Prescription: {checkup.prescription.original_filename}
+                      </span>
+                      <span className="text-xs text-blue-500 ml-auto">
+                        {formatTimestamp(checkup.prescription.uploaded_at)}
+                      </span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -385,9 +413,20 @@ const CaseDetail = () => {
                         {steril.gender} • {steril.location} • By {steril.vet_name}
                       </p>
                     </div>
-                    <span className="text-xs px-2 py-1 bg-[#E8F5E9] text-[#1B5E20] rounded font-medium">
-                      Completed
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs px-2 py-1 bg-[#E8F5E9] text-[#1B5E20] rounded font-medium">
+                        Completed
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => openEditSteril(steril)}
+                        className="h-8"
+                        data-testid={`edit-steril-${steril.id}`}
+                      >
+                        <PencilSimple size={16} />
+                      </Button>
+                    </div>
                   </div>
                   {steril.notes && (
                     <p className="mt-3 text-sm text-[#57534E] bg-[#F5F5F4] rounded p-3">
@@ -433,23 +472,63 @@ const CaseDetail = () => {
               <p className="text-[#57534E] mt-4">No media uploaded yet</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-              {caseData.images?.map((img, idx) => (
-                <div key={img.id || idx} className="aspect-square bg-[#F5F5F4] rounded-lg flex items-center justify-center border border-[#E7E5E4]">
-                  <div className="text-center">
-                    <Camera size={32} className="mx-auto text-[#78716C]" />
-                    <p className="text-xs text-[#78716C] mt-2">{img.original_filename || `Image ${idx + 1}`}</p>
+            <div className="space-y-4">
+              {/* Images */}
+              {caseData.images?.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-[#57534E] mb-3">Photos ({caseData.images.length})</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {caseData.images.map((img, idx) => (
+                      <div key={img.id || idx} className="bg-white border border-[#E7E5E4] rounded-lg overflow-hidden">
+                        <div className="aspect-square bg-[#F5F5F4] relative">
+                          <img 
+                            src={getImageUrl(img.storage_path)} 
+                            alt={img.description || `Image ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              e.target.style.display = 'none';
+                              e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                          <div className="absolute inset-0 flex items-center justify-center text-[#78716C] hidden">
+                            <Camera size={32} />
+                          </div>
+                        </div>
+                        <div className="p-2">
+                          <p className="text-sm font-medium text-[#1C1917] truncate">{img.description || "No description"}</p>
+                          <p className="text-xs text-[#78716C]">{formatTimestamp(img.uploaded_at)}</p>
+                          {img.uploaded_by_name && (
+                            <p className="text-xs text-[#A8A29E]">by {img.uploaded_by_name}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-              {caseData.videos?.map((vid, idx) => (
-                <div key={vid.id || idx} className="aspect-square bg-[#F5F5F4] rounded-lg flex items-center justify-center border border-[#E7E5E4]">
-                  <div className="text-center">
-                    <VideoCamera size={32} className="mx-auto text-[#78716C]" />
-                    <p className="text-xs text-[#78716C] mt-2">{vid.original_filename || `Video ${idx + 1}`}</p>
+              )}
+
+              {/* Videos */}
+              {caseData.videos?.length > 0 && (
+                <div>
+                  <h4 className="font-medium text-[#57534E] mb-3">Videos ({caseData.videos.length})</h4>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                    {caseData.videos.map((vid, idx) => (
+                      <div key={vid.id || idx} className="bg-white border border-[#E7E5E4] rounded-lg overflow-hidden">
+                        <div className="aspect-square bg-[#F5F5F4] flex items-center justify-center">
+                          <VideoCamera size={48} className="text-[#78716C]" />
+                        </div>
+                        <div className="p-2">
+                          <p className="text-sm font-medium text-[#1C1917] truncate">{vid.description || "No description"}</p>
+                          <p className="text-xs text-[#78716C]">{formatTimestamp(vid.uploaded_at)}</p>
+                          {vid.uploaded_by_name && (
+                            <p className="text-xs text-[#A8A29E]">by {vid.uploaded_by_name}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
+              )}
             </div>
           )}
         </TabsContent>
@@ -537,7 +616,7 @@ const CaseDetail = () => {
               <TimelineItem
                 date={caseData.created_at}
                 title="Case Created"
-                description={`Rescued from ${caseData.rescue_location}`}
+                description={`Rescued from ${caseData.rescue_location}${caseData.created_by_name ? ` by ${caseData.created_by_name}` : ''}`}
               />
               {movements.map((m) => (
                 <TimelineItem
@@ -593,6 +672,17 @@ const CaseDetail = () => {
         open={showSterilDialog}
         onClose={() => setShowSterilDialog(false)}
         caseId={id}
+        token={token}
+        vetNames={vetNames}
+        locations={sterilLocations}
+        onSuccess={fetchAllData}
+      />
+
+      {/* Edit Sterilisation Dialog */}
+      <EditSterilisationDialog
+        open={showEditSterilDialog}
+        onClose={() => { setShowEditSterilDialog(false); setEditingSteril(null); }}
+        sterilisation={editingSteril}
         token={token}
         vetNames={vetNames}
         locations={sterilLocations}
@@ -657,6 +747,7 @@ const VetCheckupDialog = ({ open, onClose, caseId, token, vetNames, onSuccess })
     notes: "",
     next_followup_date: ""
   });
+  const [prescription, setPrescription] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e) => {
@@ -667,16 +758,30 @@ const VetCheckupDialog = ({ open, onClose, caseId, token, vetNames, onSuccess })
     }
     setLoading(true);
     try {
-      await axios.post(`${API}/vet-checkups`, {
+      const response = await axios.post(`${API}/vet-checkups`, {
         case_id: caseId,
         ...form
       }, {
         headers: { Authorization: `Bearer ${token}` }
       });
+
+      // Upload prescription if provided
+      if (prescription) {
+        const formData = new FormData();
+        formData.append("file", prescription);
+        await axios.post(`${API}/vet-checkups/${response.data.id}/prescription`, formData, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data"
+          }
+        });
+      }
+
       toast.success("Vet checkup added successfully");
       onSuccess();
       onClose();
       setForm({ checkup_date: new Date().toISOString().split("T")[0], vet_name: "", notes: "", next_followup_date: "" });
+      setPrescription(null);
     } catch (error) {
       toast.error("Failed to add vet checkup");
     } finally {
@@ -698,14 +803,13 @@ const VetCheckupDialog = ({ open, onClose, caseId, token, vetNames, onSuccess })
               value={form.checkup_date}
               onChange={(e) => setForm({ ...form, checkup_date: e.target.value })}
               className="h-12 mt-1"
-              data-testid="vet-checkup-date"
             />
           </div>
           <div>
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Vet Name *</Label>
             {vetNames.length > 0 ? (
               <Select value={form.vet_name} onValueChange={(v) => setForm({ ...form, vet_name: v })}>
-                <SelectTrigger className="h-12 mt-1" data-testid="vet-checkup-vet-name">
+                <SelectTrigger className="h-12 mt-1">
                   <SelectValue placeholder="Select vet" />
                 </SelectTrigger>
                 <SelectContent>
@@ -720,7 +824,6 @@ const VetCheckupDialog = ({ open, onClose, caseId, token, vetNames, onSuccess })
                 onChange={(e) => setForm({ ...form, vet_name: e.target.value })}
                 placeholder="Enter vet name"
                 className="h-12 mt-1"
-                data-testid="vet-checkup-vet-name"
               />
             )}
           </div>
@@ -732,7 +835,6 @@ const VetCheckupDialog = ({ open, onClose, caseId, token, vetNames, onSuccess })
               placeholder="Enter checkup notes..."
               className="mt-1"
               rows={3}
-              data-testid="vet-checkup-notes"
             />
           </div>
           <div>
@@ -742,14 +844,27 @@ const VetCheckupDialog = ({ open, onClose, caseId, token, vetNames, onSuccess })
               value={form.next_followup_date}
               onChange={(e) => setForm({ ...form, next_followup_date: e.target.value })}
               className="h-12 mt-1"
-              data-testid="vet-checkup-followup-date"
             />
+          </div>
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Prescription (Optional)</Label>
+            <div className="mt-1 flex items-center gap-3">
+              <Input
+                type="file"
+                accept="image/*,.pdf"
+                onChange={(e) => setPrescription(e.target.files[0])}
+                className="h-12"
+              />
+              {prescription && (
+                <span className="text-sm text-[#4CAF50]">{prescription.name}</span>
+              )}
+            </div>
           </div>
           <div className="flex gap-3">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-12">
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white" data-testid="vet-checkup-submit">
+            <Button type="submit" disabled={loading} className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white">
               {loading ? "Saving..." : "Save"}
             </Button>
           </div>
@@ -928,13 +1043,12 @@ const SterilisationDialog = ({ open, onClose, caseId, token, vetNames, locations
               value={form.sterilisation_date}
               onChange={(e) => setForm({ ...form, sterilisation_date: e.target.value })}
               className="h-12 mt-1"
-              data-testid="sterilisation-date"
             />
           </div>
           <div>
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Gender *</Label>
             <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v })}>
-              <SelectTrigger className="h-12 mt-1" data-testid="sterilisation-gender">
+              <SelectTrigger className="h-12 mt-1">
                 <SelectValue placeholder="Select gender" />
               </SelectTrigger>
               <SelectContent>
@@ -947,7 +1061,7 @@ const SterilisationDialog = ({ open, onClose, caseId, token, vetNames, locations
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Location *</Label>
             {locations.length > 0 ? (
               <Select value={form.location} onValueChange={(v) => setForm({ ...form, location: v })}>
-                <SelectTrigger className="h-12 mt-1" data-testid="sterilisation-location">
+                <SelectTrigger className="h-12 mt-1">
                   <SelectValue placeholder="Select location" />
                 </SelectTrigger>
                 <SelectContent>
@@ -958,7 +1072,7 @@ const SterilisationDialog = ({ open, onClose, caseId, token, vetNames, locations
               </Select>
             ) : (
               <Select value={form.location} onValueChange={(v) => setForm({ ...form, location: v })}>
-                <SelectTrigger className="h-12 mt-1" data-testid="sterilisation-location">
+                <SelectTrigger className="h-12 mt-1">
                   <SelectValue placeholder="Select location" />
                 </SelectTrigger>
                 <SelectContent>
@@ -973,7 +1087,7 @@ const SterilisationDialog = ({ open, onClose, caseId, token, vetNames, locations
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Vet Name *</Label>
             {vetNames.length > 0 ? (
               <Select value={form.vet_name} onValueChange={(v) => setForm({ ...form, vet_name: v })}>
-                <SelectTrigger className="h-12 mt-1" data-testid="sterilisation-vet-name">
+                <SelectTrigger className="h-12 mt-1">
                   <SelectValue placeholder="Select vet" />
                 </SelectTrigger>
                 <SelectContent>
@@ -988,7 +1102,6 @@ const SterilisationDialog = ({ open, onClose, caseId, token, vetNames, locations
                 onChange={(e) => setForm({ ...form, vet_name: e.target.value })}
                 placeholder="Enter vet name"
                 className="h-12 mt-1"
-                data-testid="sterilisation-vet-name"
               />
             )}
           </div>
@@ -1000,15 +1113,148 @@ const SterilisationDialog = ({ open, onClose, caseId, token, vetNames, locations
               placeholder="Enter notes..."
               className="mt-1"
               rows={3}
-              data-testid="sterilisation-notes"
             />
           </div>
           <div className="flex gap-3">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-12">
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white" data-testid="sterilisation-submit">
+            <Button type="submit" disabled={loading} className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white">
               {loading ? "Saving..." : "Save"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const EditSterilisationDialog = ({ open, onClose, sterilisation, token, vetNames, locations, onSuccess }) => {
+  const [form, setForm] = useState({
+    sterilisation_date: "",
+    gender: "",
+    location: "",
+    vet_name: "",
+    notes: ""
+  });
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (sterilisation) {
+      setForm({
+        sterilisation_date: sterilisation.sterilisation_date || "",
+        gender: sterilisation.gender || "",
+        location: sterilisation.location || "",
+        vet_name: sterilisation.vet_name || "",
+        notes: sterilisation.notes || ""
+      });
+    }
+  }, [sterilisation]);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!sterilisation) return;
+    
+    setLoading(true);
+    try {
+      await axios.put(`${API}/sterilisations/${sterilisation.id}`, form, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Sterilisation record updated");
+      onSuccess();
+      onClose();
+    } catch (error) {
+      toast.error("Failed to update sterilisation record");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle style={{ fontFamily: 'Manrope' }}>Edit Sterilisation Record</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Date</Label>
+            <Input
+              type="date"
+              value={form.sterilisation_date}
+              onChange={(e) => setForm({ ...form, sterilisation_date: e.target.value })}
+              className="h-12 mt-1"
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Gender</Label>
+            <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v })}>
+              <SelectTrigger className="h-12 mt-1">
+                <SelectValue placeholder="Select gender" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Male">Male</SelectItem>
+                <SelectItem value="Female">Female</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Location</Label>
+            {locations.length > 0 ? (
+              <Select value={form.location} onValueChange={(v) => setForm({ ...form, location: v })}>
+                <SelectTrigger className="h-12 mt-1">
+                  <SelectValue placeholder="Select location" />
+                </SelectTrigger>
+                <SelectContent>
+                  {locations.map((loc) => (
+                    <SelectItem key={loc.id} value={loc.name}>{loc.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={form.location}
+                onChange={(e) => setForm({ ...form, location: e.target.value })}
+                className="h-12 mt-1"
+              />
+            )}
+          </div>
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Vet Name</Label>
+            {vetNames.length > 0 ? (
+              <Select value={form.vet_name} onValueChange={(v) => setForm({ ...form, vet_name: v })}>
+                <SelectTrigger className="h-12 mt-1">
+                  <SelectValue placeholder="Select vet" />
+                </SelectTrigger>
+                <SelectContent>
+                  {vetNames.map((vet) => (
+                    <SelectItem key={vet.id} value={vet.name}>{vet.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <Input
+                value={form.vet_name}
+                onChange={(e) => setForm({ ...form, vet_name: e.target.value })}
+                className="h-12 mt-1"
+              />
+            )}
+          </div>
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Notes</Label>
+            <Textarea
+              value={form.notes}
+              onChange={(e) => setForm({ ...form, notes: e.target.value })}
+              className="mt-1"
+              rows={3}
+            />
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-12">
+              Cancel
+            </Button>
+            <Button type="submit" disabled={loading} className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white">
+              {loading ? "Saving..." : "Update"}
             </Button>
           </div>
         </form>
@@ -1069,7 +1315,7 @@ const MovementDialog = ({ open, onClose, caseId, token, onSuccess }) => {
           <div>
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">From Location *</Label>
             <Select value={form.from_location} onValueChange={(v) => setForm({ ...form, from_location: v })}>
-              <SelectTrigger className="h-12 mt-1" data-testid="movement-from">
+              <SelectTrigger className="h-12 mt-1">
                 <SelectValue placeholder="Select location" />
               </SelectTrigger>
               <SelectContent>
@@ -1082,7 +1328,7 @@ const MovementDialog = ({ open, onClose, caseId, token, onSuccess }) => {
           <div>
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">To Location *</Label>
             <Select value={form.to_location} onValueChange={(v) => setForm({ ...form, to_location: v })}>
-              <SelectTrigger className="h-12 mt-1" data-testid="movement-to">
+              <SelectTrigger className="h-12 mt-1">
                 <SelectValue placeholder="Select location" />
               </SelectTrigger>
               <SelectContent>
@@ -1099,13 +1345,12 @@ const MovementDialog = ({ open, onClose, caseId, token, onSuccess }) => {
               value={form.date}
               onChange={(e) => setForm({ ...form, date: e.target.value })}
               className="h-12 mt-1"
-              data-testid="movement-date"
             />
           </div>
           <div>
             <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Reason *</Label>
             <Select value={form.reason} onValueChange={(v) => setForm({ ...form, reason: v })}>
-              <SelectTrigger className="h-12 mt-1" data-testid="movement-reason">
+              <SelectTrigger className="h-12 mt-1">
                 <SelectValue placeholder="Select reason" />
               </SelectTrigger>
               <SelectContent>
@@ -1123,7 +1368,6 @@ const MovementDialog = ({ open, onClose, caseId, token, onSuccess }) => {
                 onChange={(e) => setForm({ ...form, custom_reason: e.target.value })}
                 placeholder="Enter reason"
                 className="h-12 mt-1"
-                data-testid="movement-custom-reason"
               />
             </div>
           )}
@@ -1131,7 +1375,7 @@ const MovementDialog = ({ open, onClose, caseId, token, onSuccess }) => {
             <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-12">
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white" data-testid="movement-submit">
+            <Button type="submit" disabled={loading} className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white">
               {loading ? "Saving..." : "Save"}
             </Button>
           </div>
@@ -1143,6 +1387,7 @@ const MovementDialog = ({ open, onClose, caseId, token, onSuccess }) => {
 
 const UploadDialog = ({ open, onClose, type, onUpload }) => {
   const [file, setFile] = useState(null);
+  const [description, setDescription] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
@@ -1150,10 +1395,15 @@ const UploadDialog = ({ open, onClose, type, onUpload }) => {
       toast.error("Please select a file");
       return;
     }
+    if (!description.trim()) {
+      toast.error("Please enter a description/note for the file");
+      return;
+    }
     setLoading(true);
-    await onUpload(file, type);
+    await onUpload(file, type, description.trim());
     setLoading(false);
     setFile(null);
+    setDescription("");
   };
 
   return (
@@ -1172,7 +1422,6 @@ const UploadDialog = ({ open, onClose, type, onUpload }) => {
               onChange={(e) => setFile(e.target.files[0])}
               className="hidden"
               id="file-upload"
-              data-testid="file-upload-input"
             />
             <label htmlFor="file-upload" className="cursor-pointer">
               <Upload size={48} className="mx-auto text-[#78716C]" />
@@ -1184,15 +1433,24 @@ const UploadDialog = ({ open, onClose, type, onUpload }) => {
               )}
             </label>
           </div>
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">Description/Note *</Label>
+            <Input
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="e.g., Blood Test Report, X-ray, Treatment Video"
+              className="h-12 mt-1"
+            />
+            <p className="text-xs text-[#78716C] mt-1">This helps identify the file later</p>
+          </div>
           <div className="flex gap-3">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-12">
               Cancel
             </Button>
             <Button
               onClick={handleSubmit}
-              disabled={loading || !file}
+              disabled={loading || !file || !description.trim()}
               className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white"
-              data-testid="upload-submit"
             >
               {loading ? "Uploading..." : "Upload"}
             </Button>
@@ -1247,14 +1505,13 @@ const SpecialNoteDialog = ({ open, onClose, caseId, token, onSuccess }) => {
               placeholder="Enter special note for this case..."
               className="mt-1"
               rows={4}
-              data-testid="special-note-input"
             />
           </div>
           <div className="flex gap-3">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-12">
               Cancel
             </Button>
-            <Button type="submit" disabled={loading} className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white" data-testid="special-note-submit">
+            <Button type="submit" disabled={loading} className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white">
               {loading ? "Saving..." : "Save"}
             </Button>
           </div>

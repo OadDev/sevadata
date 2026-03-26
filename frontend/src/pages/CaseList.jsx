@@ -349,6 +349,8 @@ const CaseList = () => {
 };
 
 const CaseCard = ({ caseData }) => {
+  const { token } = useAuth();
+  
   const getConditionClass = (condition) => {
     const classes = {
       Critical: "condition-critical",
@@ -370,14 +372,16 @@ const CaseCard = ({ caseData }) => {
     return "status-info";
   };
 
-  const placeholderImages = [
-    "https://images.unsplash.com/photo-1643786261573-9838e66d89dc?w=200&h=200&fit=crop",
-    "https://images.unsplash.com/photo-1733783506192-653df6185a7d?w=200&h=200&fit=crop"
-  ];
+  // Get the first image URL if available
+  const getImageUrl = () => {
+    if (caseData.images?.length > 0) {
+      const img = caseData.images[0];
+      return `${API}/files/${img.storage_path}?auth=${token}`;
+    }
+    return null;
+  };
 
-  const imageUrl = caseData.images?.length > 0 
-    ? null 
-    : placeholderImages[Math.floor(Math.random() * placeholderImages.length)];
+  const thumbnailUrl = getImageUrl();
 
   return (
     <Link 
@@ -388,17 +392,23 @@ const CaseCard = ({ caseData }) => {
       <div className="flex gap-4">
         {/* Image */}
         <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-lg bg-[#F5F5F4] overflow-hidden flex-shrink-0">
-          {caseData.images?.length > 0 ? (
-            <div className="w-full h-full flex items-center justify-center text-[#78716C]">
-              <PawPrint size={32} />
-            </div>
-          ) : (
+          {thumbnailUrl ? (
             <img 
-              src={imageUrl} 
+              src={thumbnailUrl} 
               alt={caseData.animal_name || "Animal"}
               className="w-full h-full object-cover"
+              onError={(e) => {
+                e.target.style.display = 'none';
+                e.target.nextSibling.style.display = 'flex';
+              }}
             />
-          )}
+          ) : null}
+          <div 
+            className="w-full h-full flex items-center justify-center text-[#78716C]"
+            style={{ display: thumbnailUrl ? 'none' : 'flex' }}
+          >
+            <PawPrint size={32} />
+          </div>
         </div>
 
         {/* Content */}

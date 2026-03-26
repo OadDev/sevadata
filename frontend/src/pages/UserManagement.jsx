@@ -29,7 +29,8 @@ import {
   Warning,
   Stethoscope,
   MapPin,
-  Trash
+  Trash,
+  Key
 } from "@phosphor-icons/react";
 
 const UserManagement = () => {
@@ -43,6 +44,7 @@ const UserManagement = () => {
   const [showAddDialog, setShowAddDialog] = useState(false);
   const [showVetDialog, setShowVetDialog] = useState(false);
   const [showLocationDialog, setShowLocationDialog] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
   const [search, setSearch] = useState("");
 
   useEffect(() => {
@@ -149,11 +151,22 @@ const UserManagement = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-[#1C1917]" style={{ fontFamily: 'Manrope' }}>
-          Admin Panel
-        </h1>
-        <p className="text-[#57534E] mt-1">Manage users, vets, and locations</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-[#1C1917]" style={{ fontFamily: 'Manrope' }}>
+            Admin Panel
+          </h1>
+          <p className="text-[#57534E] mt-1">Manage users, vets, and locations</p>
+        </div>
+        <Button
+          onClick={() => setShowPasswordDialog(true)}
+          variant="outline"
+          className="h-12 border-2 border-[#4CAF50] text-[#1B5E20] hover:bg-[#E8F5E9]"
+          data-testid="change-password-button"
+        >
+          <Key size={20} className="mr-2" />
+          Change Password
+        </Button>
       </div>
 
       {/* Tabs */}
@@ -433,6 +446,13 @@ const UserManagement = () => {
         token={token}
         onSuccess={fetchData}
       />
+
+      {/* Change Password Dialog */}
+      <ChangePasswordDialog
+        open={showPasswordDialog}
+        onClose={() => setShowPasswordDialog(false)}
+        token={token}
+      />
     </div>
   );
 };
@@ -706,6 +726,111 @@ const AddLocationDialog = ({ open, onClose, token, onSuccess }) => {
               data-testid="add-location-submit"
             >
               {loading ? "Adding..." : "Add Location"}
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
+const ChangePasswordDialog = ({ open, onClose, token }) => {
+  const [form, setForm] = useState({
+    current_password: "",
+    new_password: "",
+    confirm_password: ""
+  });
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!form.current_password || !form.new_password) {
+      toast.error("Please fill all fields");
+      return;
+    }
+    if (form.new_password !== form.confirm_password) {
+      toast.error("New passwords do not match");
+      return;
+    }
+    if (form.new_password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
+    setLoading(true);
+    try {
+      await axios.put(`${API}/auth/change-password`, {
+        current_password: form.current_password,
+        new_password: form.new_password
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Password changed successfully");
+      onClose();
+      setForm({ current_password: "", new_password: "", confirm_password: "" });
+    } catch (error) {
+      toast.error(error.response?.data?.detail || "Failed to change password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onClose}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle style={{ fontFamily: 'Manrope' }}>Change Password</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">
+              Current Password *
+            </Label>
+            <Input
+              type="password"
+              value={form.current_password}
+              onChange={(e) => setForm({ ...form, current_password: e.target.value })}
+              placeholder="Enter current password"
+              className="h-12 mt-1"
+              data-testid="current-password-input"
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">
+              New Password *
+            </Label>
+            <Input
+              type="password"
+              value={form.new_password}
+              onChange={(e) => setForm({ ...form, new_password: e.target.value })}
+              placeholder="Enter new password"
+              className="h-12 mt-1"
+              data-testid="new-password-input"
+            />
+          </div>
+          <div>
+            <Label className="text-xs font-bold uppercase tracking-wider text-[#57534E]">
+              Confirm New Password *
+            </Label>
+            <Input
+              type="password"
+              value={form.confirm_password}
+              onChange={(e) => setForm({ ...form, confirm_password: e.target.value })}
+              placeholder="Confirm new password"
+              className="h-12 mt-1"
+              data-testid="confirm-password-input"
+            />
+          </div>
+          <div className="flex gap-3">
+            <Button type="button" variant="outline" onClick={onClose} className="flex-1 h-12">
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              disabled={loading}
+              className="flex-1 h-12 bg-[#4CAF50] hover:bg-[#43A047] text-white"
+              data-testid="change-password-submit"
+            >
+              {loading ? "Changing..." : "Change Password"}
             </Button>
           </div>
         </form>
