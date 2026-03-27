@@ -98,26 +98,36 @@ const CaseForm = () => {
   const uploadMedia = async (caseId) => {
     // Upload images
     for (const file of pendingImages) {
-      const formData = new FormData();
-      formData.append("file", file);
-      await axios.post(`${API}/cases/${caseId}/images`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data"
-        }
-      });
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        await axios.post(`${API}/cases/${caseId}/images`, formData, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data"
+          }
+        });
+      } catch (err) {
+        console.error("Image upload failed:", err.response?.data || err.message);
+        throw err;
+      }
     }
     
     // Upload videos
     for (const file of pendingVideos) {
-      const formData = new FormData();
-      formData.append("file", file);
-      await axios.post(`${API}/cases/${caseId}/videos`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data"
-        }
-      });
+      try {
+        const formData = new FormData();
+        formData.append("file", file);
+        await axios.post(`${API}/cases/${caseId}/videos`, formData, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data"
+          }
+        });
+      } catch (err) {
+        console.error("Video upload failed:", err.response?.data || err.message);
+        throw err;
+      }
     }
   };
 
@@ -144,6 +154,9 @@ const CaseForm = () => {
         });
         caseId = response.data.id;
         toast.success("Case created successfully");
+        
+        // Small delay to ensure case is saved to database
+        await new Promise(resolve => setTimeout(resolve, 500));
       }
 
       // Upload any pending media
@@ -153,7 +166,9 @@ const CaseForm = () => {
           await uploadMedia(caseId);
           toast.success("Media uploaded successfully");
         } catch (error) {
-          toast.error("Some media failed to upload");
+          console.error("Media upload error:", error);
+          const errorMsg = error.response?.data?.detail || error.message || "Upload failed";
+          toast.error(`Media upload failed: ${errorMsg}`);
         }
         setUploadingMedia(false);
       }
