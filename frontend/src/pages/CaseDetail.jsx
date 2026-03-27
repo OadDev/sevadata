@@ -169,6 +169,45 @@ const CaseDetail = () => {
     }
   };
 
+  const handleDeleteImage = async (imageId) => {
+    if (!window.confirm("Are you sure you want to delete this image?")) return;
+    try {
+      await axios.delete(`${API}/cases/${id}/images/${imageId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Image deleted successfully");
+      fetchAllData();
+    } catch (error) {
+      toast.error("Failed to delete image");
+    }
+  };
+
+  const handleDeleteVideo = async (videoId) => {
+    if (!window.confirm("Are you sure you want to delete this video?")) return;
+    try {
+      await axios.delete(`${API}/cases/${id}/videos/${videoId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Video deleted successfully");
+      fetchAllData();
+    } catch (error) {
+      toast.error("Failed to delete video");
+    }
+  };
+
+  const handleDeletePrescription = async (checkupId) => {
+    if (!window.confirm("Are you sure you want to delete this prescription?")) return;
+    try {
+      await axios.delete(`${API}/vet-checkups/${checkupId}/prescription`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Prescription deleted successfully");
+      fetchAllData();
+    } catch (error) {
+      toast.error("Failed to delete prescription");
+    }
+  };
+
   const getConditionClass = (condition) => {
     const classes = {
       Critical: "condition-critical",
@@ -577,71 +616,150 @@ const CaseDetail = () => {
             </div>
           </div>
 
-          {caseData.images?.length === 0 && caseData.videos?.length === 0 ? (
-            <div className="bg-white border border-[#E7E5E4] rounded-lg p-8 text-center">
-              <Camera size={48} className="mx-auto text-[#D6D3D1]" />
-              <p className="text-[#57534E] mt-4">No media uploaded yet</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              {/* Images */}
-              {caseData.images?.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-[#57534E] mb-3">Photos ({caseData.images.length})</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {caseData.images.map((img, idx) => (
-                      <div key={img.id || idx} className="bg-white border border-[#E7E5E4] rounded-lg overflow-hidden">
-                        <div className="aspect-square bg-[#F5F5F4] relative">
-                          <img 
-                            src={getImageUrl(img.storage_path)} 
-                            alt={img.description || `Image ${idx + 1}`}
-                            className="w-full h-full object-cover"
-                            onError={(e) => {
-                              e.target.style.display = 'none';
-                              e.target.nextSibling.style.display = 'flex';
-                            }}
-                          />
-                          <div className="absolute inset-0 flex items-center justify-center text-[#78716C] hidden">
-                            <Camera size={32} />
+          {/* Get prescriptions from vet checkups */}
+          {(() => {
+            const prescriptions = vetCheckups.filter(c => c.prescription).map(c => ({
+              ...c.prescription,
+              checkup_id: c.id,
+              checkup_date: c.checkup_date,
+              vet_name: c.vet_name
+            }));
+            const hasMedia = (caseData.images?.length > 0) || (caseData.videos?.length > 0) || (prescriptions.length > 0);
+            
+            if (!hasMedia) {
+              return (
+                <div className="bg-white border border-[#E7E5E4] rounded-lg p-8 text-center">
+                  <Camera size={48} className="mx-auto text-[#D6D3D1]" />
+                  <p className="text-[#57534E] mt-4">No media uploaded yet</p>
+                </div>
+              );
+            }
+            
+            return (
+              <div className="space-y-4">
+                {/* Images */}
+                {caseData.images?.length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-[#57534E] mb-3">Photos ({caseData.images.length})</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {caseData.images.map((img, idx) => (
+                        <div key={img.id || idx} className="bg-white border border-[#E7E5E4] rounded-lg overflow-hidden relative group">
+                          <div className="aspect-square bg-[#F5F5F4] relative">
+                            <img 
+                              src={getImageUrl(img.storage_path)} 
+                              alt={img.description || `Image ${idx + 1}`}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'flex';
+                              }}
+                            />
+                            <div className="absolute inset-0 flex items-center justify-center text-[#78716C] hidden">
+                              <Camera size={32} />
+                            </div>
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeleteImage(img.id)}
+                                className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                data-testid={`delete-image-${img.id}`}
+                              >
+                                <Trash size={16} />
+                              </button>
+                            )}
+                          </div>
+                          <div className="p-2">
+                            <p className="text-sm font-medium text-[#1C1917] truncate">{img.description || "No description"}</p>
+                            <p className="text-xs text-[#78716C]">{formatTimestamp(img.uploaded_at)}</p>
+                            {img.uploaded_by_name && (
+                              <p className="text-xs text-[#A8A29E]">by {img.uploaded_by_name}</p>
+                            )}
                           </div>
                         </div>
-                        <div className="p-2">
-                          <p className="text-sm font-medium text-[#1C1917] truncate">{img.description || "No description"}</p>
-                          <p className="text-xs text-[#78716C]">{formatTimestamp(img.uploaded_at)}</p>
-                          {img.uploaded_by_name && (
-                            <p className="text-xs text-[#A8A29E]">by {img.uploaded_by_name}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
-              {/* Videos */}
-              {caseData.videos?.length > 0 && (
-                <div>
-                  <h4 className="font-medium text-[#57534E] mb-3">Videos ({caseData.videos.length})</h4>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
-                    {caseData.videos.map((vid, idx) => (
-                      <div key={vid.id || idx} className="bg-white border border-[#E7E5E4] rounded-lg overflow-hidden">
-                        <div className="aspect-square bg-[#F5F5F4] flex items-center justify-center">
-                          <VideoCamera size={48} className="text-[#78716C]" />
+                {/* Videos */}
+                {caseData.videos?.length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-[#57534E] mb-3">Videos ({caseData.videos.length})</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {caseData.videos.map((vid, idx) => (
+                        <div key={vid.id || idx} className="bg-white border border-[#E7E5E4] rounded-lg overflow-hidden relative group">
+                          <div className="aspect-square bg-[#F5F5F4] flex items-center justify-center relative">
+                            <VideoCamera size={48} className="text-[#78716C]" />
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeleteVideo(vid.id)}
+                                className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                data-testid={`delete-video-${vid.id}`}
+                              >
+                                <Trash size={16} />
+                              </button>
+                            )}
+                          </div>
+                          <div className="p-2">
+                            <p className="text-sm font-medium text-[#1C1917] truncate">{vid.description || "No description"}</p>
+                            <p className="text-xs text-[#78716C]">{formatTimestamp(vid.uploaded_at)}</p>
+                            {vid.uploaded_by_name && (
+                              <p className="text-xs text-[#A8A29E]">by {vid.uploaded_by_name}</p>
+                            )}
+                            <a
+                              href={getImageUrl(vid.storage_path)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-2 inline-block px-3 py-1 bg-[#4CAF50] text-white text-xs rounded hover:bg-[#43A047]"
+                            >
+                              Play Video
+                            </a>
+                          </div>
                         </div>
-                        <div className="p-2">
-                          <p className="text-sm font-medium text-[#1C1917] truncate">{vid.description || "No description"}</p>
-                          <p className="text-xs text-[#78716C]">{formatTimestamp(vid.uploaded_at)}</p>
-                          {vid.uploaded_by_name && (
-                            <p className="text-xs text-[#A8A29E]">by {vid.uploaded_by_name}</p>
-                          )}
-                        </div>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
-            </div>
-          )}
+                )}
+
+                {/* Prescriptions */}
+                {prescriptions.length > 0 && (
+                  <div>
+                    <h4 className="font-medium text-[#57534E] mb-3">Prescriptions ({prescriptions.length})</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                      {prescriptions.map((presc, idx) => (
+                        <div key={presc.id || idx} className="bg-white border border-blue-200 rounded-lg overflow-hidden relative group">
+                          <div className="aspect-square bg-blue-50 flex items-center justify-center relative">
+                            <FileText size={48} className="text-blue-600" />
+                            {isAdmin && (
+                              <button
+                                onClick={() => handleDeletePrescription(presc.checkup_id)}
+                                className="absolute top-2 right-2 w-8 h-8 bg-red-500 text-white rounded-full flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                data-testid={`delete-prescription-${presc.id}`}
+                              >
+                                <Trash size={16} />
+                              </button>
+                            )}
+                          </div>
+                          <div className="p-2">
+                            <p className="text-sm font-medium text-[#1C1917] truncate">{presc.original_filename}</p>
+                            <p className="text-xs text-[#78716C]">Checkup: {formatDate(presc.checkup_date)}</p>
+                            <p className="text-xs text-[#A8A29E]">by {presc.vet_name}</p>
+                            <a
+                              href={getImageUrl(presc.storage_path)}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="mt-2 inline-block px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                            >
+                              View
+                            </a>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </TabsContent>
 
         {/* Notes Tab */}
