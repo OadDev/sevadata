@@ -1216,6 +1216,63 @@ async def mark_followup_complete(checkup_id: str, user: dict = Depends(get_curre
         raise HTTPException(status_code=404, detail="Checkup not found")
     return {"message": "Followup marked as complete"}
 
+@api_router.get("/notifications/deceased")
+async def get_deceased_notifications(user: dict = Depends(get_current_user)):
+    """Get deceased cases where reporter has not been informed"""
+    # Find all deceased cases where reporter_informed is False or None
+    cases = await db.cases.find({
+        "is_deleted": False,
+        "status": "Deceased",
+        "$or": [
+            {"reporter_informed": False},
+            {"reporter_informed": None},
+            {"reporter_informed": {"$exists": False}}
+        ]
+    }, {"_id": 0}).to_list(100)
+    
+    notifications = []
+    for case in cases:
+        notifications.append({
+            "case_id": case["id"],
+            "case_number": case["case_id"],
+            "animal_name": case.get("animal_name") or case.get("animal_type", "Unknown"),
+            "animal_type": case.get("animal_type", "Unknown"),
+            "reporter_name": case.get("reporter_name"),
+            "reporter_contact": case.get("reporter_contact"),
+            "deceased_date": case.get("updated_at"),
+            "reporter_informed": case.get("reporter_informed", False)
+        })
+    
+    return notifications
+
+@api_router.get("/notifications/deceased/all")
+async def get_all_deceased_with_status(user: dict = Depends(require_admin)):
+    """Admin view: Get all deceased cases with their reporter informed status"""
+    cases = await db.cases.find({
+        "is_deleted": False,
+        "status": "Deceased"
+    }, {"_id": 0}).to_list(100)
+    
+    notifications = []
+    for case in cases:
+        notifications.append({
+            "case_id": case["id"],
+            "case_number": case["case_id"],
+            "animal_name": case.get("animal_name") or case.get("animal_type", "Unknown"),
+            "animal_type": case.get("animal_type", "Unknown"),
+            "reporter_name": case.get("reporter_name"),
+            "reporter_contact": case.get("reporter_contact"),
+            "deceased_date": case.get("updated_at"),
+            "reporter_informed": case.get("reporter_informed", False),
+            "reporter_informed_at": case.get("reporter_informed_at"),
+            "reporter_informed_by": case.get("reporter_informed_by")
+        })
+    
+    # Sort: not informed first, then by date
+    notifications.sort(key=lambda x: (x["reporter_informed"] or False, x["deceased_date"] or ""), reverse=False)
+    
+    return notifications
+
 # ==================== DASHBOARD METRICS ====================
 
 @api_router.get("/dashboard/metrics")

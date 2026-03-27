@@ -17,7 +17,9 @@ import {
   Bell,
   CheckCircle,
   Clock,
-  CalendarCheck
+  CalendarCheck,
+  Phone,
+  Skull
 } from "@phosphor-icons/react";
 import { Button } from "../components/ui/button";
 import {
@@ -35,10 +37,11 @@ import {
 import { formatDate } from "../utils/dateFormat";
 
 const Dashboard = () => {
-  const { token } = useAuth();
+  const { token, isAdmin } = useAuth();
   const [metrics, setMetrics] = useState(null);
   const [charts, setCharts] = useState(null);
   const [notifications, setNotifications] = useState([]);
+  const [deceasedNotifications, setDeceasedNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -47,7 +50,7 @@ const Dashboard = () => {
 
   const fetchData = async () => {
     try {
-      const [metricsRes, chartsRes, notifRes] = await Promise.all([
+      const requests = [
         axios.get(`${API}/dashboard/metrics`, {
           headers: { Authorization: `Bearer ${token}` }
         }),
@@ -56,11 +59,18 @@ const Dashboard = () => {
         }),
         axios.get(`${API}/notifications/followups`, {
           headers: { Authorization: `Bearer ${token}` }
+        }),
+        // Get deceased notifications (all for admin, pending only for users)
+        axios.get(`${API}/notifications/deceased${isAdmin ? '/all' : ''}`, {
+          headers: { Authorization: `Bearer ${token}` }
         })
-      ]);
+      ];
+
+      const [metricsRes, chartsRes, notifRes, deceasedRes] = await Promise.all(requests);
       setMetrics(metricsRes.data);
       setCharts(chartsRes.data);
       setNotifications(notifRes.data);
+      setDeceasedNotifications(deceasedRes.data);
     } catch (error) {
       toast.error("Failed to load dashboard data");
     } finally {
@@ -77,6 +87,18 @@ const Dashboard = () => {
       fetchData();
     } catch (error) {
       toast.error("Failed to update followup");
+    }
+  };
+
+  const markReporterInformed = async (caseId, informed) => {
+    try {
+      await axios.put(`${API}/cases/${caseId}/reporter-informed?informed=${informed}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success(informed ? "Reporter marked as informed" : "Status reset");
+      fetchData();
+    } catch (error) {
+      toast.error("Failed to update reporter status");
     }
   };
 
@@ -167,6 +189,87 @@ const Dashboard = () => {
                     <CheckCircle size={16} className="mr-1" />
                     Done
                   </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Deceased Notifications - Reporter Not Informed */}
+      {deceasedNotifications.length > 0 && (
+        <div className="bg-white border-2 border-[#DC2626] rounded-lg p-5">
+          <div className="flex items-center gap-2 mb-4">
+            <Skull size={22} className="text-[#DC2626]" />
+            <h3 className="text-lg font-semibold text-[#DC2626]" style={{ fontFamily: 'Manrope' }}>
+              {isAdmin ? "Deceased Cases - Reporter Status" : "Pending Reporter Notifications"} ({deceasedNotifications.length})
+            </h3>
+          </div>
+          <div className="space-y-3 max-h-80 overflow-y-auto">
+            {deceasedNotifications.map((notif) => (
+              <div 
+                key={notif.case_id}
+                className={`p-3 rounded-lg border flex flex-col sm:flex-row sm:items-center justify-between gap-3 ${
+                  notif.reporter_informed 
+                    ? 'bg-[#E8F5E9] border-[#4CAF50]' 
+                    : 'bg-red-50 border-red-200'
+                }`}
+              >
+                <div className="flex-1">
+                  <div className="flex items-center gap-2">
+                    {notif.reporter_informed ? (
+                      <CheckCircle size={18} className="text-[#1B5E20]" weight="fill" />
+                    ) : (
+                      <Warning size={18} className="text-red-600" />
+                    )}
+                    <span className={`text-xs font-semibold uppercase ${
+                      notif.reporter_informed ? 'text-[#1B5E20]' : 'text-red-600'
+                    }`}>
+                      {notif.reporter_informed ? 'INFORMED' : 'PENDING'}
+                    </span>
+                  </div>
+                  <p className="text-sm font-medium text-[#1C1917] mt-1">
+                    {notif.animal_name} <span className="text-[#78716C]">({notif.case_number})</span>
+                  </p>
+                  {notif.reporter_name && notif.reporter_contact && (
+                    <p className="text-xs text-[#57534E] flex items-center gap-1 mt-1">
+                      <Phone size={14} />
+                      {notif.reporter_name} - {notif.reporter_contact}
+                    </p>
+                  )}
+                  {notif.reporter_informed && notif.reporter_informed_by && (
+                    <p className="text-xs text-[#1B5E20] mt-1">
+                      Informed by {notif.reporter_informed_by} on {formatDate(notif.reporter_informed_at)}
+                    </p>
+                  )}
+                </div>
+                <div className="flex items-center gap-2">
+                  <Link to={`/cases/${notif.case_id}`}>
+                    <Button variant="outline" size="sm" className="h-9">
+                      View Case
+                    </Button>
+                  </Link>
+                  {!notif.reporter_informed ? (
+                    <Button 
+                      size="sm" 
+                      className="h-9 bg-[#4CAF50] hover:bg-[#43A047] text-white"
+                      onClick={() => markReporterInformed(notif.case_id, true)}
+                      data-testid={`mark-informed-${notif.case_id}`}
+                    >
+                      <CheckCircle size={16} className="mr-1" />
+                      Informed
+                    </Button>
+                  ) : isAdmin && (
+                    <Button 
+                      variant="outline"
+                      size="sm" 
+                      className="h-9 text-[#78716C]"
+                      onClick={() => markReporterInformed(notif.case_id, false)}
+                      data-testid={`reset-informed-${notif.case_id}`}
+                    >
+                      Reset
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
