@@ -1317,14 +1317,20 @@ async def get_dashboard_metrics(user: dict = Depends(get_current_user)):
     injured = await db.cases.count_documents({"is_deleted": False, "condition": "Injury"})
     sick = await db.cases.count_documents({"is_deleted": False, "condition": "Sick"})
     
-    # Sterilisation counts
-    total_sterilised = await db.sterilisations.count_documents({})
-    sterilised_month = await db.sterilisations.count_documents({"created_at": {"$gte": month_start}})
+    # Sterilisation counts - only for non-deleted cases
+    # Get all non-deleted case IDs
+    non_deleted_cases = await db.cases.distinct("id", {"is_deleted": False})
+    
+    total_sterilised = await db.sterilisations.count_documents({"case_id": {"$in": non_deleted_cases}})
+    sterilised_month = await db.sterilisations.count_documents({
+        "case_id": {"$in": non_deleted_cases},
+        "created_at": {"$gte": month_start}
+    })
     pending_sterilisation = await db.cases.count_documents({"is_deleted": False, "sterilisation_status": "Pending"})
     
-    # Gender breakdown for sterilisations
-    male_sterilised = await db.sterilisations.count_documents({"gender": "Male"})
-    female_sterilised = await db.sterilisations.count_documents({"gender": "Female"})
+    # Gender breakdown for sterilisations (only for non-deleted cases)
+    male_sterilised = await db.sterilisations.count_documents({"case_id": {"$in": non_deleted_cases}, "gender": "Male"})
+    female_sterilised = await db.sterilisations.count_documents({"case_id": {"$in": non_deleted_cases}, "gender": "Female"})
     
     # Vet checkups - followups due
     today = now.strftime("%Y-%m-%d")
@@ -1386,7 +1392,7 @@ async def get_dashboard_charts(user: dict = Depends(get_current_user)):
         })
     
     # Status distribution
-    statuses = ["Rescued (Status Pending)", "In Govt Shelter", "In SEVA Shelter", "Under Observation", "Released", "Adopted", "Deceased"]
+    statuses = ["Rescued (Status Pending)", "Released", "Permanent Resident", "Adopted", "Deceased"]
     status_distribution = []
     for status in statuses:
         count = await db.cases.count_documents({"is_deleted": False, "status": status})
