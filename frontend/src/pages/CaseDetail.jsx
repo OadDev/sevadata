@@ -470,9 +470,18 @@ const CaseDetail = () => {
                       <span className="text-sm text-blue-700">
                         Prescription: {checkup.prescription.original_filename}
                       </span>
-                      <span className="text-xs text-blue-500 ml-auto">
+                      <span className="text-xs text-blue-500 ml-auto mr-2">
                         {formatTimestamp(checkup.prescription.uploaded_at)}
                       </span>
+                      <a
+                        href={`${API}/files/${checkup.prescription.storage_path}?auth=${token}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                        data-testid={`view-prescription-${checkup.id}`}
+                      >
+                        View
+                      </a>
                     </div>
                   )}
                 </div>
