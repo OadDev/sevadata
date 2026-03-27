@@ -180,6 +180,9 @@ class CaseResponse(BaseModel):
     created_by_name: Optional[str] = None
     created_at: str
     updated_at: str
+    reporter_informed: Optional[bool] = None
+    reporter_informed_at: Optional[str] = None
+    reporter_informed_by: Optional[str] = None
 
 class VetCheckupCreate(BaseModel):
     case_id: str
@@ -603,7 +606,10 @@ async def create_case(case: CaseCreate, user: dict = Depends(get_current_user)):
         "created_by": user["id"],
         "created_by_name": user.get("name", "Unknown"),
         "created_at": now,
-        "updated_at": now
+        "updated_at": now,
+        "reporter_informed": None,
+        "reporter_informed_at": None,
+        "reporter_informed_by": None
     }
     await db.cases.insert_one(case_doc)
     await log_audit(user["id"], "CASE_CREATED", f"Created case {case_id}")
@@ -762,6 +768,32 @@ async def delete_case(case_id: str, user: dict = Depends(require_admin)):
     case = await db.cases.find_one({"id": case_id}, {"_id": 0})
     await log_audit(user["id"], "CASE_DELETED", f"Soft deleted case {case['case_id']}")
     return {"message": "Case deleted successfully"}
+
+@api_router.put("/cases/{case_id}/reporter-informed")
+async def update_reporter_informed(case_id: str, informed: bool = Query(...), user: dict = Depends(get_current_user)):
+    """Mark whether the reporter has been informed about the animal's passing"""
+    case = await db.cases.find_one({"id": case_id, "is_deleted": False}, {"_id": 0})
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    now = datetime.now(timezone.utc).isoformat()
+    update_data = {
+        "reporter_informed": informed,
+        "reporter_informed_at": now if informed else None,
+        "reporter_informed_by": user.get("name", "Unknown") if informed else None,
+        "updated_at": now
+    }
+    
+    await db.cases.update_one(
+        {"id": case_id},
+        {"$set": update_data}
+    )
+    
+    action = "REPORTER_INFORMED" if informed else "REPORTER_INFORMED_RESET"
+    await log_audit(user["id"], action, f"Reporter informed status updated for case {case['case_id']}")
+    
+    updated_case = await db.cases.find_one({"id": case_id}, {"_id": 0})
+    return CaseResponse(**updated_case)
 
 # ==================== CASE MEDIA UPLOAD ====================
 

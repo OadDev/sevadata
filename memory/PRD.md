@@ -53,6 +53,7 @@ Build a full-stack, production-ready web application for managing animal rescue,
 - [x] Filter count display
 - [x] Dashboard: Total Cases block
 - [x] Case List thumbnails display correctly from Object Storage
+- [x] Reporter Informed notification for deceased animals (tracks if reporter was notified about animal's passing)
 
 ## P1 - Backlog
 - [ ] Inventory/Medicine stock module

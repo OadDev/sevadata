@@ -38,7 +38,10 @@ import {
   PawPrint,
   Note,
   User,
-  FileText
+  FileText,
+  Warning,
+  CheckCircle,
+  Phone
 } from "@phosphor-icons/react";
 import { formatDate, formatTime, formatTimestamp } from "../utils/dateFormat";
 
@@ -139,6 +142,18 @@ const CaseDetail = () => {
   const openEditSteril = (steril) => {
     setEditingSteril(steril);
     setShowEditSterilDialog(true);
+  };
+
+  const handleReporterInformed = async (informed) => {
+    try {
+      await axios.put(`${API}/cases/${id}/reporter-informed?informed=${informed}`, {}, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success(informed ? "Reporter marked as informed" : "Reporter status reset");
+      fetchAllData();
+    } catch (error) {
+      toast.error("Failed to update reporter status");
+    }
   };
 
   const getConditionClass = (condition) => {
@@ -246,6 +261,69 @@ const CaseDetail = () => {
           Added by {caseData.created_by_name || "Unknown"} on {formatTimestamp(caseData.created_at)}
         </span>
       </div>
+
+      {/* Reporter Informed Banner - Only shown for Deceased cases */}
+      {caseData.status === "Deceased" && (
+        <div className={`rounded-lg p-4 border-2 ${
+          caseData.reporter_informed 
+            ? "bg-[#E8F5E9] border-[#4CAF50]" 
+            : "bg-[#FEF3C7] border-[#F59E0B]"
+        }`}>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              {caseData.reporter_informed ? (
+                <CheckCircle size={24} className="text-[#1B5E20] flex-shrink-0 mt-0.5" weight="fill" />
+              ) : (
+                <Warning size={24} className="text-[#92400E] flex-shrink-0 mt-0.5" weight="fill" />
+              )}
+              <div>
+                <p className={`font-semibold ${caseData.reporter_informed ? "text-[#1B5E20]" : "text-[#92400E]"}`}>
+                  {caseData.reporter_informed 
+                    ? `Reporter informed for the passing of ${caseData.animal_name || caseData.animal_type} (${caseData.case_id})`
+                    : `Reporter informed for the passing of ${caseData.animal_name || caseData.animal_type} (${caseData.case_id})?`
+                  }
+                </p>
+                {caseData.reporter_informed && caseData.reporter_informed_at && (
+                  <p className="text-sm text-[#1B5E20] mt-1">
+                    Marked by {caseData.reporter_informed_by || "Unknown"} on {formatTimestamp(caseData.reporter_informed_at)}
+                  </p>
+                )}
+                {!caseData.reporter_informed && caseData.reporter_name && caseData.reporter_contact && (
+                  <p className="text-sm text-[#92400E] mt-1 flex items-center gap-2">
+                    <Phone size={16} />
+                    Contact: {caseData.reporter_name} - {caseData.reporter_contact}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="flex gap-2 sm:flex-shrink-0">
+              {caseData.reporter_informed ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => handleReporterInformed(false)}
+                  className="h-10 border-[#1B5E20] text-[#1B5E20] hover:bg-[#C8E6C9]"
+                  data-testid="reset-reporter-informed"
+                >
+                  Reset Status
+                </Button>
+              ) : (
+                <>
+                  <Button
+                    size="sm"
+                    onClick={() => handleReporterInformed(true)}
+                    className="h-10 bg-[#4CAF50] hover:bg-[#43A047] text-white"
+                    data-testid="mark-reporter-informed"
+                  >
+                    <CheckCircle size={18} className="mr-2" />
+                    Yes, Informed
+                  </Button>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
