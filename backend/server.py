@@ -807,7 +807,7 @@ MIME_TYPES = {
 async def upload_case_image(
     case_id: str, 
     file: UploadFile = File(...), 
-    description: str = Query(..., description="Description/note for the image"),
+    description: Optional[str] = Query(None, description="Description/note for the image"),
     user: dict = Depends(get_current_user)
 ):
     case = await db.cases.find_one({"id": case_id, "is_deleted": False}, {"_id": 0})
@@ -826,7 +826,7 @@ async def upload_case_image(
         "id": file_id,
         "storage_path": result["path"],
         "original_filename": file.filename,
-        "description": description,
+        "description": description or "",
         "content_type": content_type,
         "size": result.get("size", len(data)),
         "uploaded_by": user["id"],
@@ -845,7 +845,7 @@ async def upload_case_image(
 async def upload_case_video(
     case_id: str, 
     file: UploadFile = File(...), 
-    description: str = Query(..., description="Description/note for the video"),
+    description: Optional[str] = Query(None, description="Description/note for the video"),
     user: dict = Depends(get_current_user)
 ):
     case = await db.cases.find_one({"id": case_id, "is_deleted": False}, {"_id": 0})
@@ -864,7 +864,7 @@ async def upload_case_video(
         "id": file_id,
         "storage_path": result["path"],
         "original_filename": file.filename,
-        "description": description,
+        "description": description or "",
         "content_type": content_type,
         "size": result.get("size", len(data)),
         "uploaded_by": user["id"],
@@ -878,6 +878,55 @@ async def upload_case_video(
     )
     
     return video_doc
+
+@api_router.delete("/cases/{case_id}/images/{image_id}")
+async def delete_case_image(case_id: str, image_id: str, user: dict = Depends(require_admin)):
+    """Admin only: Delete an image from a case"""
+    case = await db.cases.find_one({"id": case_id, "is_deleted": False}, {"_id": 0})
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    result = await db.cases.update_one(
+        {"id": case_id},
+        {"$pull": {"images": {"id": image_id}}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    await log_audit(user["id"], "IMAGE_DELETED", f"Deleted image {image_id} from case {case['case_id']}")
+    return {"message": "Image deleted successfully"}
+
+@api_router.delete("/cases/{case_id}/videos/{video_id}")
+async def delete_case_video(case_id: str, video_id: str, user: dict = Depends(require_admin)):
+    """Admin only: Delete a video from a case"""
+    case = await db.cases.find_one({"id": case_id, "is_deleted": False}, {"_id": 0})
+    if not case:
+        raise HTTPException(status_code=404, detail="Case not found")
+    
+    result = await db.cases.update_one(
+        {"id": case_id},
+        {"$pull": {"videos": {"id": video_id}}}
+    )
+    if result.modified_count == 0:
+        raise HTTPException(status_code=404, detail="Video not found")
+    
+    await log_audit(user["id"], "VIDEO_DELETED", f"Deleted video {video_id} from case {case['case_id']}")
+    return {"message": "Video deleted successfully"}
+
+@api_router.delete("/vet-checkups/{checkup_id}/prescription")
+async def delete_checkup_prescription(checkup_id: str, user: dict = Depends(require_admin)):
+    """Admin only: Delete a prescription from a vet checkup"""
+    checkup = await db.vet_checkups.find_one({"id": checkup_id}, {"_id": 0})
+    if not checkup:
+        raise HTTPException(status_code=404, detail="Vet checkup not found")
+    
+    result = await db.vet_checkups.update_one(
+        {"id": checkup_id},
+        {"$unset": {"prescription": ""}}
+    )
+    
+    await log_audit(user["id"], "PRESCRIPTION_DELETED", f"Deleted prescription from checkup {checkup_id}")
+    return {"message": "Prescription deleted successfully"}
 
 @api_router.get("/files/{path:path}")
 async def download_file(path: str, authorization: str = Header(None), auth: str = Query(None)):
