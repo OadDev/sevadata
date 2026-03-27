@@ -140,9 +140,9 @@ const Login = () => {
               </Button>
             </form>
 
-            <p className="text-center text-sm text-[#78716C] mt-6">
+            {/* <p className="text-center text-sm text-[#78716C] mt-6">
               Default: admin@seva.org / Admin@123
-            </p>
+            </p> */}
           </div>
 
           {/* Security Notice */}
