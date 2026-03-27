@@ -860,7 +860,7 @@ const CaseDetail = () => {
                   key={v.id}
                   date={v.created_at}
                   title="Vet Checkup"
-                  description={`By ${v.vet_name}`}
+                  description={`By ${v.vet_name}${v.notes ? ` - ${v.notes}` : ''}`}
                 />
               ))}
               {sterilisations.map((s) => (
