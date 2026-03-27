@@ -1332,9 +1332,10 @@ async def get_dashboard_metrics(user: dict = Depends(get_current_user)):
     male_sterilised = await db.sterilisations.count_documents({"case_id": {"$in": non_deleted_cases}, "gender": "Male"})
     female_sterilised = await db.sterilisations.count_documents({"case_id": {"$in": non_deleted_cases}, "gender": "Female"})
     
-    # Vet checkups - followups due
+    # Vet checkups - followups due (only for non-deleted cases)
     today = now.strftime("%Y-%m-%d")
     followups_due = await db.vet_checkups.count_documents({
+        "case_id": {"$in": non_deleted_cases},
         "next_followup_date": {"$lte": today},
         "followup_completed": {"$ne": True}
     })
