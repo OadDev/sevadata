@@ -1,5 +1,10 @@
 # SEVA SMS - VPS Deployment Guide
 
+## Production Domain
+- **Main Domain**: https://sevadata.in
+- **API Docs**: https://sevadata.in/api/docs
+- **API Base URL**: https://sevadata.in/api
+
 ## Prerequisites
 
 ### Server Requirements
@@ -163,11 +168,9 @@ yarn install
 
 # Create production environment file
 cat > /var/www/seva-sms/frontend/.env << 'EOF'
-REACT_APP_BACKEND_URL=https://your-domain.com
+REACT_APP_BACKEND_URL=https://sevadata.in
 EOF
 ```
-
-**Important:** Replace `your-domain.com` with your actual domain or server IP.
 
 ### Build Frontend for Production
 
@@ -194,7 +197,7 @@ sudo nano /etc/nginx/sites-available/seva-sms
 ```nginx
 server {
     listen 80;
-    server_name your-domain.com www.your-domain.com;
+    server_name sevadata.in www.sevadata.in;
 
     # Frontend (React build)
     location / {
@@ -253,8 +256,8 @@ sudo systemctl enable nginx
 # Install Certbot
 sudo apt install -y certbot python3-certbot-nginx
 
-# Obtain SSL certificate
-sudo certbot --nginx -d your-domain.com -d www.your-domain.com
+# Obtain SSL certificate for sevadata.in
+sudo certbot --nginx -d sevadata.in -d www.sevadata.in
 
 # Auto-renewal is set up automatically
 # Test auto-renewal
@@ -500,5 +503,10 @@ sudo crontab -e
 For issues related to:
 - **Emergent Object Storage**: Check your EMERGENT_LLM_KEY and balance at Emergent Platform
 - **Application bugs**: Check backend logs with `sudo journalctl -u seva-backend -f`
+
+**Production URLs**:
+- Main Site: https://sevadata.in
+- API Docs: https://sevadata.in/api/docs
+- API Base: https://sevadata.in/api
 
 **Default Credentials**: admin@seva.org / Admin@123
