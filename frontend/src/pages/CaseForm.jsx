@@ -35,12 +35,8 @@ const CaseForm = () => {
   const [loading, setLoading] = useState(false);
   const [fetching, setFetching] = useState(isEditing);
   const [uploadingMedia, setUploadingMedia] = useState(false);
-  const [pendingImages, setPendingImages] = useState([]); // [{file, description}]
-  const [pendingVideos, setPendingVideos] = useState([]); // [{file, description}]
-  const [showImageDescDialog, setShowImageDescDialog] = useState(false);
-  const [showVideoDescDialog, setShowVideoDescDialog] = useState(false);
-  const [tempFiles, setTempFiles] = useState([]);
-  const [tempDescriptions, setTempDescriptions] = useState({});
+  const [pendingImages, setPendingImages] = useState([]);
+  const [pendingVideos, setPendingVideos] = useState([]);
   const [form, setForm] = useState({
     animal_name: "",
     animal_type: "Dog",
@@ -83,53 +79,12 @@ const CaseForm = () => {
 
   const handleImageSelect = (e) => {
     const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      setTempFiles(files);
-      setTempDescriptions({});
-      setShowImageDescDialog(true);
-    }
+    setPendingImages([...pendingImages, ...files]);
   };
 
   const handleVideoSelect = (e) => {
     const files = Array.from(e.target.files);
-    if (files.length > 0) {
-      setTempFiles(files);
-      setTempDescriptions({});
-      setShowVideoDescDialog(true);
-    }
-  };
-
-  const confirmImageUpload = () => {
-    // Check all files have descriptions
-    const allHaveDesc = tempFiles.every((f, idx) => tempDescriptions[idx]?.trim());
-    if (!allHaveDesc) {
-      toast.error("Please enter a description for all files");
-      return;
-    }
-    const newImages = tempFiles.map((file, idx) => ({
-      file,
-      description: tempDescriptions[idx].trim()
-    }));
-    setPendingImages([...pendingImages, ...newImages]);
-    setShowImageDescDialog(false);
-    setTempFiles([]);
-    setTempDescriptions({});
-  };
-
-  const confirmVideoUpload = () => {
-    const allHaveDesc = tempFiles.every((f, idx) => tempDescriptions[idx]?.trim());
-    if (!allHaveDesc) {
-      toast.error("Please enter a description for all files");
-      return;
-    }
-    const newVideos = tempFiles.map((file, idx) => ({
-      file,
-      description: tempDescriptions[idx].trim()
-    }));
-    setPendingVideos([...pendingVideos, ...newVideos]);
-    setShowVideoDescDialog(false);
-    setTempFiles([]);
-    setTempDescriptions({});
+    setPendingVideos([...pendingVideos, ...files]);
   };
 
   const removeImage = (index) => {
@@ -141,11 +96,11 @@ const CaseForm = () => {
   };
 
   const uploadMedia = async (caseId) => {
-    // Upload images with descriptions
-    for (const item of pendingImages) {
+    // Upload images
+    for (const file of pendingImages) {
       const formData = new FormData();
-      formData.append("file", item.file);
-      await axios.post(`${API}/cases/${caseId}/images?description=${encodeURIComponent(item.description)}`, formData, {
+      formData.append("file", file);
+      await axios.post(`${API}/cases/${caseId}/images`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data"
@@ -153,11 +108,11 @@ const CaseForm = () => {
       });
     }
     
-    // Upload videos with descriptions
-    for (const item of pendingVideos) {
+    // Upload videos
+    for (const file of pendingVideos) {
       const formData = new FormData();
-      formData.append("file", item.file);
-      await axios.post(`${API}/cases/${caseId}/videos?description=${encodeURIComponent(item.description)}`, formData, {
+      formData.append("file", file);
+      await axios.post(`${API}/cases/${caseId}/videos`, formData, {
         headers: {
           Authorization: `Bearer ${token}`,
           "Content-Type": "multipart/form-data"
@@ -230,10 +185,6 @@ const CaseForm = () => {
 
   const statuses = [
     "Rescued (Status Pending)",
-    "In Govt Shelter",
-    "In Private Shelter",
-    "In SEVA Shelter",
-    "Under Observation",
     "Released",
     "Permanent Resident",
     "Adopted",
@@ -558,7 +509,6 @@ const CaseForm = () => {
             <Camera size={22} className="text-[#4CAF50]" />
             Photos & Videos (Optional)
           </h2>
-          <p className="text-sm text-[#78716C] mb-4">A description/note is required for each file</p>
           
           <div className="space-y-4">
             {/* Image Upload */}
@@ -567,18 +517,13 @@ const CaseForm = () => {
                 Photos
               </Label>
               <div className="mt-2 flex flex-wrap gap-3">
-                {pendingImages.map((item, idx) => (
-                  <div key={idx} className="relative w-24 rounded-lg overflow-hidden bg-[#F5F5F4] border border-[#E7E5E4]">
-                    <div className="w-full h-20">
-                      <img 
-                        src={URL.createObjectURL(item.file)} 
-                        alt={`Preview ${idx}`}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
-                    <div className="p-1">
-                      <p className="text-xs text-[#57534E] truncate" title={item.description}>{item.description}</p>
-                    </div>
+                {pendingImages.map((file, idx) => (
+                  <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden bg-[#F5F5F4] border border-[#E7E5E4]">
+                    <img 
+                      src={URL.createObjectURL(file)} 
+                      alt={`Preview ${idx}`}
+                      className="w-full h-full object-cover"
+                    />
                     <button
                       type="button"
                       onClick={() => removeImage(idx)}
@@ -609,14 +554,9 @@ const CaseForm = () => {
                 Videos
               </Label>
               <div className="mt-2 flex flex-wrap gap-3">
-                {pendingVideos.map((item, idx) => (
-                  <div key={idx} className="relative w-24 rounded-lg overflow-hidden bg-[#F5F5F4] border border-[#E7E5E4]">
-                    <div className="w-full h-20 flex items-center justify-center">
-                      <VideoCamera size={32} className="text-[#78716C]" />
-                    </div>
-                    <div className="p-1">
-                      <p className="text-xs text-[#57534E] truncate" title={item.description}>{item.description}</p>
-                    </div>
+                {pendingVideos.map((file, idx) => (
+                  <div key={idx} className="relative w-20 h-20 rounded-lg overflow-hidden bg-[#F5F5F4] border border-[#E7E5E4] flex items-center justify-center">
+                    <VideoCamera size={32} className="text-[#78716C]" />
                     <button
                       type="button"
                       onClick={() => removeVideo(idx)}
@@ -642,102 +582,6 @@ const CaseForm = () => {
             </div>
           </div>
         </div>
-
-        {/* Image Description Dialog */}
-        {showImageDescDialog && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
-              <h3 className="text-lg font-semibold text-[#1C1917] mb-4" style={{ fontFamily: 'Manrope' }}>
-                Add Description for Photos
-              </h3>
-              <p className="text-sm text-[#78716C] mb-4">Please add a description for each photo (required)</p>
-              <div className="space-y-4">
-                {tempFiles.map((file, idx) => (
-                  <div key={idx} className="flex items-start gap-3">
-                    <div className="w-16 h-16 rounded bg-[#F5F5F4] overflow-hidden flex-shrink-0">
-                      <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs text-[#78716C] truncate mb-1">{file.name}</p>
-                      <Input
-                        value={tempDescriptions[idx] || ""}
-                        onChange={(e) => setTempDescriptions({...tempDescriptions, [idx]: e.target.value})}
-                        placeholder="e.g., Injury photo, X-ray..."
-                        className="h-10"
-                        data-testid={`image-desc-${idx}`}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-3 mt-6">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => { setShowImageDescDialog(false); setTempFiles([]); setTempDescriptions({}); }}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  onClick={confirmImageUpload}
-                  className="flex-1 bg-[#4CAF50] hover:bg-[#43A047] text-white"
-                >
-                  Add Photos
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Video Description Dialog */}
-        {showVideoDescDialog && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white rounded-lg p-6 w-full max-w-md max-h-[80vh] overflow-y-auto">
-              <h3 className="text-lg font-semibold text-[#1C1917] mb-4" style={{ fontFamily: 'Manrope' }}>
-                Add Description for Videos
-              </h3>
-              <p className="text-sm text-[#78716C] mb-4">Please add a description for each video (required)</p>
-              <div className="space-y-4">
-                {tempFiles.map((file, idx) => (
-                  <div key={idx} className="flex items-start gap-3">
-                    <div className="w-16 h-16 rounded bg-[#F5F5F4] overflow-hidden flex-shrink-0 flex items-center justify-center">
-                      <VideoCamera size={24} className="text-[#78716C]" />
-                    </div>
-                    <div className="flex-1">
-                      <p className="text-xs text-[#78716C] truncate mb-1">{file.name}</p>
-                      <Input
-                        value={tempDescriptions[idx] || ""}
-                        onChange={(e) => setTempDescriptions({...tempDescriptions, [idx]: e.target.value})}
-                        placeholder="e.g., Treatment video..."
-                        className="h-10"
-                        data-testid={`video-desc-${idx}`}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-3 mt-6">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => { setShowVideoDescDialog(false); setTempFiles([]); setTempDescriptions({}); }}
-                  className="flex-1"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  type="button"
-                  onClick={confirmVideoUpload}
-                  className="flex-1 bg-[#4CAF50] hover:bg-[#43A047] text-white"
-                >
-                  Add Videos
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Actions */}
         <div className="flex flex-col sm:flex-row gap-3">

@@ -620,7 +620,7 @@ async def get_cases(
     status: Optional[str] = None,
     condition: Optional[str] = None,
     case_type: Optional[str] = None,
-    shelter: Optional[str] = None,
+    current_shelter: Optional[str] = None,
     sterilisation_status: Optional[str] = None,
     search: Optional[str] = None,
     date_filter: Optional[str] = None,
@@ -636,8 +636,8 @@ async def get_cases(
         query["condition"] = condition
     if case_type:
         query["case_type"] = case_type
-    if shelter:
-        query["current_shelter"] = shelter
+    if current_shelter:
+        query["current_shelter"] = current_shelter
     if sterilisation_status:
         query["sterilisation_status"] = sterilisation_status
     if search:
@@ -677,7 +677,7 @@ async def get_cases_count(
     status: Optional[str] = None,
     condition: Optional[str] = None,
     case_type: Optional[str] = None,
-    shelter: Optional[str] = None,
+    current_shelter: Optional[str] = None,
     sterilisation_status: Optional[str] = None,
     search: Optional[str] = None,
     date_filter: Optional[str] = None,
@@ -693,8 +693,8 @@ async def get_cases_count(
         query["condition"] = condition
     if case_type:
         query["case_type"] = case_type
-    if shelter:
-        query["current_shelter"] = shelter
+    if current_shelter:
+        query["current_shelter"] = current_shelter
     if sterilisation_status:
         query["sterilisation_status"] = sterilisation_status
     if search:
@@ -1001,6 +1001,20 @@ async def upload_checkup_prescription(checkup_id: str, file: UploadFile = File(.
     )
     
     return prescription_doc
+
+@api_router.delete("/vet-checkups/{checkup_id}")
+async def delete_vet_checkup(checkup_id: str, user: dict = Depends(require_admin)):
+    """Admin only: Delete a vet checkup record"""
+    checkup = await db.vet_checkups.find_one({"id": checkup_id}, {"_id": 0})
+    if not checkup:
+        raise HTTPException(status_code=404, detail="Vet checkup not found")
+    
+    result = await db.vet_checkups.delete_one({"id": checkup_id})
+    if result.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Vet checkup not found")
+    
+    await log_audit(user["id"], "VET_CHECKUP_DELETED", f"Deleted vet checkup {checkup_id}")
+    return {"message": "Vet checkup deleted successfully"}
 
 # ==================== STERILISATION ENDPOINTS ====================
 

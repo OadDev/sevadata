@@ -41,7 +41,7 @@ const CaseList = () => {
     status: searchParams.get("status") || "",
     condition: searchParams.get("condition") || "",
     case_type: searchParams.get("case_type") || "",
-    shelter: searchParams.get("shelter") || "",
+    current_shelter: searchParams.get("current_shelter") || "",
     sterilisation_status: searchParams.get("sterilisation_status") || "",
     date_filter: searchParams.get("date_filter") || ""
   });
@@ -133,7 +133,7 @@ const CaseList = () => {
 
   const getStatusClass = (status) => {
     if (["Deceased"].includes(status)) return "status-critical";
-    if (["Under Observation", "In Govt Shelter", "In Private Shelter"].includes(status)) return "status-warning";
+    // Status warning removed - shelter options handled via current_shelter field
     if (["Released", "Adopted"].includes(status)) return "status-success";
     return "status-info";
   };
@@ -257,14 +257,21 @@ const CaseList = () => {
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="Rescued (Status Pending)">Rescued (Status Pending)</SelectItem>
-                  <SelectItem value="In Govt Shelter">In Govt Shelter</SelectItem>
-                  <SelectItem value="In Private Shelter">In Private Shelter</SelectItem>
-                  <SelectItem value="In SEVA Shelter">In SEVA Shelter</SelectItem>
-                  <SelectItem value="Under Observation">Under Observation</SelectItem>
                   <SelectItem value="Released">Released</SelectItem>
                   <SelectItem value="Permanent Resident">Permanent Resident</SelectItem>
                   <SelectItem value="Adopted">Adopted</SelectItem>
                   <SelectItem value="Deceased">Deceased</SelectItem>
+                </SelectContent>
+              </Select>
+
+              <Select value={filters.current_shelter} onValueChange={(v) => handleFilterChange("current_shelter", v)}>
+                <SelectTrigger className="h-12" data-testid="filter-shelter">
+                  <SelectValue placeholder="Shelter" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="SEVA Shelter">SEVA Shelter</SelectItem>
+                  <SelectItem value="Government Shelter">Government Shelter</SelectItem>
+                  <SelectItem value="Private Shelter">Private Shelter</SelectItem>
                 </SelectContent>
               </Select>
 
@@ -367,7 +374,7 @@ const CaseCard = ({ caseData }) => {
 
   const getStatusClass = (status) => {
     if (["Deceased"].includes(status)) return "status-critical";
-    if (["Under Observation", "In Govt Shelter", "In Private Shelter"].includes(status)) return "status-warning";
+    // Status warning removed - shelter options handled via current_shelter field
     if (["Released", "Adopted"].includes(status)) return "status-success";
     return "status-info";
   };

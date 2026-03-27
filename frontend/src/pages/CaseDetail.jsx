@@ -156,6 +156,19 @@ const CaseDetail = () => {
     }
   };
 
+  const handleDeleteCheckup = async (checkupId) => {
+    if (!window.confirm("Are you sure you want to delete this vet checkup?")) return;
+    try {
+      await axios.delete(`${API}/vet-checkups/${checkupId}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      toast.success("Vet checkup deleted successfully");
+      fetchAllData();
+    } catch (error) {
+      toast.error("Failed to delete vet checkup");
+    }
+  };
+
   const getConditionClass = (condition) => {
     const classes = {
       Critical: "condition-critical",
@@ -433,6 +446,17 @@ const CaseDetail = () => {
                       >
                         <PencilSimple size={16} />
                       </Button>
+                      {isAdmin && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleDeleteCheckup(checkup.id)}
+                          className="h-8 text-red-600 border-red-300 hover:bg-red-50"
+                          data-testid={`delete-checkup-${checkup.id}`}
+                        >
+                          <Trash size={16} />
+                        </Button>
+                      )}
                     </div>
                   </div>
                   {checkup.notes && (
